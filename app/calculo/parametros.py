@@ -725,6 +725,7 @@ def _extrair_proveniencias(
     campos_derivados_runtime = {
         "saldo_anual_brl",
         "sessoes_utilizadas_ano",
+        "percentual_coparticipacao",
         "proveniencias",
     }
 

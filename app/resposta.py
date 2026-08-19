@@ -152,6 +152,11 @@ async def _buscar_contexto(
         or {}
     )
 
+    documento_processado = bool(
+        state.get("dados_documento")
+        or state.get("categoria_documento")
+    )
+
     categoria = state.get(
         "categoria_documento"
     )
@@ -222,6 +227,12 @@ def _fallback(
         or {}
     )
 
+    documento_processado = bool(
+        state.get("dados_documento")
+        or state.get("categoria_documento")
+        or state.get("documentos")
+    )
+
     pendencias = (
         state.get("pendencias")
         or []
@@ -244,17 +255,25 @@ def _fallback(
     texto = mensagem.casefold()
 
     if not beneficiario:
-        if state.get("anexo_base64"):
+        if documento_processado:
             return (
-                "Recebi o documento enviado. Para vinculá-lo "
-                "ao atendimento correto, preciso que você "
+                "Recebi e analisei o documento enviado, que ficou "
+                "registrado nesta solicitação. Para continuar o "
+                "pedido de reembolso e consultar a operadora, "
                 "informe a sua carteirinha."
             )
 
+        if state.get("anexo_base64"):
+            return (
+                "Recebi o documento enviado. Para continuar a "
+                "solicitação de reembolso, preciso da sua "
+                "carteirinha para consultar a operadora."
+            )
+
         return (
-            "Entendi que você quer tratar de um reembolso. "
-            "Antes de consultar a operadora, informe a sua "
-            "carteirinha."
+            "Entendi que se trata de um pedido de reembolso. "
+            "Para continuar a análise e consultar a operadora, "
+            "informe a sua carteirinha."
         )
 
     if decisao == "ESCALADO_ANALISTA":
@@ -300,10 +319,54 @@ def _fallback(
                 "só isso",
             )
         ):
+            operacoes = set(
+                state.get("operacoes_utilizadas")
+                or []
+            )
+
+            fatores = []
+
+            if "determinar_teto_procedimento" in operacoes:
+                fatores.append(
+                    "o teto aplicável ao procedimento"
+                )
+
+            if "aplicar_coparticipacao" in operacoes:
+                fatores.append(
+                    "a coparticipação prevista para o caso"
+                )
+
+            if "limitar_por_saldo_anual" in operacoes:
+                fatores.append(
+                    "o saldo ou limite anual disponível"
+                )
+
+            if fatores:
+                if len(fatores) == 1:
+                    motivo = fatores[0]
+                else:
+                    motivo = (
+                        ", ".join(fatores[:-1])
+                        + " e "
+                        + fatores[-1]
+                    )
+
+                return (
+                    f"O valor final foi apurado considerando {motivo}. "
+                    + (
+                        f"Por isso, o reembolso calculado é {valor}, "
+                        "e não o valor integral solicitado."
+                        if valor
+                        else
+                        "Por isso, o valor integral solicitado "
+                        "não é necessariamente reembolsado."
+                    )
+                )
+
             return (
-                "O valor final não depende apenas do que "
-                "foi pago; ele é limitado pelas regras "
-                "aplicáveis ao procedimento e ao plano."
+                "O valor final foi calculado pelas regras aplicáveis "
+                "ao procedimento e ao plano, sem usar apenas o valor "
+                "pago como referência."
             )
 
         return (
@@ -385,6 +448,42 @@ async def gerar_resposta(
         state.get("beneficiario")
         or {}
     )
+
+    documento_processado = bool(
+        state.get("dados_documento")
+        or state.get("categoria_documento")
+        or state.get("documentos")
+    )
+
+    if (
+        not beneficiario
+        and documento_processado
+    ):
+        if not mensagem.strip():
+            return (
+                "Recebi e analisei o documento enviado. "
+                "Ele ficou registrado nesta sessão. "
+                "O que você deseja fazer com esse documento?"
+            )
+
+        categoria = str(
+            state.get("categoria_documento")
+            or ""
+        ).strip()
+
+        tipo_atendimento = (
+            "consulta médica"
+            if categoria == "CONSULTA_MEDICA"
+            else "atendimento"
+        )
+
+        return (
+            f"Entendi: você está solicitando o reembolso de uma "
+            f"{tipo_atendimento} particular. Recebi o documento "
+            f"que você enviou e posso usá-lo para analisar essa "
+            f"solicitação. Para consultar a operadora e prosseguir "
+            f"com o reembolso, informe a sua carteirinha."
+        )
 
     contexto = {
         "beneficiario_validado": bool(

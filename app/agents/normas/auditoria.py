@@ -700,11 +700,98 @@ def auditar_regras_aplicadas(
         )
     )
 
+    regras_proveniencia_operacoes: list[str] = []
+
+    if (
+        "aplicar_coparticipacao"
+        in operacoes_utilizadas
+    ):
+        regras_proveniencia_operacoes.extend(
+            obter_regras_obrigatorias(
+                parametros_utilizados=[
+                    "percentual_coparticipacao"
+                ],
+                parametros_calculo=(
+                    parametros_calculo
+                ),
+            )
+        )
+
+    regras_referenciadas_operacoes: list[str] = []
+
+    for item in resultados_rag:
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        secoes = _secoes_por_artigo(
+            texto
+        )
+
+        for _, secao in secoes:
+            secao_normalizada = (
+                _normalizar_semantica(
+                    secao
+                )
+            )
+
+            referencias: list[str] = []
+
+            if (
+                "apurar_menor_valor"
+                in operacoes_utilizadas
+                and "apuracao"
+                in secao_normalizada
+                and (
+                    "valor pago"
+                    in secao_normalizada
+                    or "menor"
+                    in secao_normalizada
+                    or "teto"
+                    in secao_normalizada
+                )
+            ):
+                referencias.extend(
+                    re.findall(
+                        r"apuracao.{0,140}art\.\s*(\d+)",
+                        secao_normalizada,
+                    )
+                )
+
+            if (
+                "aplicar_coparticipacao"
+                in operacoes_utilizadas
+                and "coparticip"
+                in secao_normalizada
+            ):
+                referencias.extend(
+                    re.findall(
+                        r"tabela.{0,180}art\.\s*(\d+)",
+                        secao_normalizada,
+                    )
+                )
+
+            for numero in referencias:
+                dispositivo = (
+                    f"ART-{numero}"
+                )
+
+                if (
+                    dispositivo
+                    not in regras_referenciadas_operacoes
+                ):
+                    regras_referenciadas_operacoes.append(
+                        dispositivo
+                    )
+
     candidatos = list(
         dict.fromkeys(
             [
                 *candidatos,
                 *regras_tuss_explicitas,
+                *regras_referenciadas_operacoes,
+                *regras_proveniencia_operacoes,
             ]
         )
     )
@@ -739,7 +826,14 @@ def auditar_regras_aplicadas(
         operacoes_utilizadas
         and regras_deterministicas
     ):
-        return regras_deterministicas
+        return list(
+            dict.fromkeys(
+                [
+                    *regras_deterministicas,
+                    *regras_proveniencia_operacoes,
+                ]
+            )
+        )
 
     modelo = criar_llm(
         temperature=0,

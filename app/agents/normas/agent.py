@@ -114,6 +114,29 @@ async def normas_node(
         )
     )
 
+    resultados_auditoria = list(
+        resultados_aplicaveis
+    )
+
+    codigo_tuss_texto = str(
+        codigo_tuss or ""
+    ).strip()
+
+    if codigo_tuss_texto:
+        for item in resultados:
+            texto_item = str(
+                item.get("texto")
+                or ""
+            )
+
+            if (
+                codigo_tuss_texto in texto_item
+                and item not in resultados_auditoria
+            ):
+                resultados_auditoria.append(
+                    item
+                )
+
     estado_normativo: AgentState = {
         **state,
         "agente_atual": "normas",
@@ -189,7 +212,7 @@ async def normas_node(
                 resultado.get("regras_aplicadas")
                 or []
             ),
-            resultados_rag=resultados_aplicaveis,
+            resultados_rag=resultados_auditoria,
             parametros_calculo=parametros_calculo,
             parametros_utilizados=(
                 resultado.get(

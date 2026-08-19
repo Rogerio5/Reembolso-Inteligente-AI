@@ -239,6 +239,89 @@ async def chat(
         resposta
     )
 
+    if not resposta.strip():
+        decisao_atual = resultado.get(
+            "decisao"
+        )
+
+        valor_atual = resultado.get(
+            "valor_reembolso_brl"
+        )
+
+        pendencias_atuais = (
+            resultado.get("pendencias")
+            or []
+        )
+
+        if (
+            decisao_atual
+            in {
+                "APROVADO",
+                "APROVADO_PARCIAL",
+            }
+            and valor_atual is not None
+        ):
+            valor_texto = (
+                f"{float(valor_atual):,.2f}"
+                .replace(",", "X")
+                .replace(".", ",")
+                .replace("X", ".")
+            )
+
+            resposta = (
+                "Seu pedido já foi analisado. "
+                f"O valor de reembolso apurado é "
+                f"R$ {valor_texto}."
+            )
+
+        elif decisao_atual == "NEGADO":
+            resposta = (
+                "Seu pedido já foi analisado e "
+                "não foi aprovado para reembolso."
+            )
+
+        elif (
+            decisao_atual
+            == "PENDENTE_DOCUMENTO"
+        ):
+            if pendencias_atuais:
+                resposta = (
+                    "A análise ainda depende de "
+                    f"documentação complementar: "
+                    f"{pendencias_atuais[0]}"
+                )
+            else:
+                resposta = (
+                    "A análise ainda depende de "
+                    "documentação complementar."
+                )
+
+        elif (
+            decisao_atual
+            == "ESCALADO_ANALISTA"
+        ):
+            resposta = (
+                "Este pedido depende de análise "
+                "humana antes da conclusão."
+            )
+
+        elif pendencias_atuais:
+            resposta = (
+                "Para continuar o atendimento, "
+                f"{pendencias_atuais[0]}"
+            )
+
+        else:
+            resposta = (
+                "Recebi sua mensagem e vou continuar "
+                "o atendimento com os dados já "
+                "registrados nesta sessão."
+            )
+
+        resposta = sanitizar_resposta(
+            resposta
+        )
+
     historico_anterior = (
         resultado.get(
             "historico"

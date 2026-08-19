@@ -39,16 +39,19 @@ def selecionar_proximo_agente(
         or {}
     )
 
+    if (
+        state.get("anexo_base64")
+        and not state.get("dados_documento")
+    ):
+        return (
+            "documento",
+            "Há um documento novo para análise antes das demais etapas.",
+        )
+
     if not beneficiario:
         return (
             "triagem",
             "Dados do beneficiário ainda precisam ser validados.",
-        )
-
-    if state.get("anexo_base64"):
-        return (
-            "documento",
-            "Há um documento novo para análise.",
         )
 
     if (

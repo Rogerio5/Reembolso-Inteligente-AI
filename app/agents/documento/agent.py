@@ -129,8 +129,17 @@ def documento_node(
         "documentos": documentos,
         "valor_solicitado_brl": valor_principal,
         "consulta_normativa": consulta_normativa,
-        "proximo_agente": "normas",
+        "proximo_agente": (
+            "normas"
+            if state.get("beneficiario")
+            else "triagem"
+        ),
         "handoff_reason": (
-            "Documento classificado e dados extraídos."
+            "Documento classificado e dados extraídos; "
+            + (
+                "beneficiário já validado, seguir para normas."
+                if state.get("beneficiario")
+                else "beneficiário ainda precisa ser validado."
+            )
         ),
     }
