@@ -1,0 +1,51 @@
+{
+  "bm25_dir": "bm25",
+  "chunk_overlap": 100,
+  "chunk_size": 700,
+  "documentos": [
+    {
+      "arquivo": "anexo_iv_exclusoes.pdf",
+      "sha256": "7f275024cd650f70cc4c9aafa8827ecafdafef616a5db4faabac2f34f25e1f64"
+    },
+    {
+      "arquivo": "circular_02_2026.pdf",
+      "sha256": "081238d10b9eae5aa0513ec1f12c345cea7cac1772a10a40b8d67dc59199bbb3"
+    },
+    {
+      "arquivo": "circular_04_2025.pdf",
+      "sha256": "7566ec2fd790bacd41a67b001f2b066032018024992bae5b1b40d29345dbab0a"
+    },
+    {
+      "arquivo": "circular_09_2025.pdf",
+      "sha256": "3062d076c13e718e3c92100b0a02717b98ce1b4c7d60cea84d642f8d114f5230"
+    },
+    {
+      "arquivo": "circular_11_2026.pdf",
+      "sha256": "4c1d73708831f5a51bea9233ddc4a2746a5bc367d195a8202725e96a47b49f51"
+    },
+    {
+      "arquivo": "faq_interno.docx",
+      "sha256": "d242aa7317b6afe50b4a3e49eeeff5eab3db3d8e9b26a39d7b4f9f691de161c5"
+    },
+    {
+      "arquivo": "manual_rede_credenciada.pdf",
+      "sha256": "d2640c9e139fe61f604d41f10a03a3bd19ab767c7d389ca8e704b12dc6301690"
+    },
+    {
+      "arquivo": "nota_tecnica_02_documentos.pdf",
+      "sha256": "cd64ac50b07f5d0bd3bcd682e79dfd6067577793267621a027db0f59b4ac2adc"
+    },
+    {
+      "arquivo": "regulamento_geral.pdf",
+      "sha256": "571e953f74a05d8915ad4705ce35fee87015abe7fca6a9085756f50d4b1df10d"
+    },
+    {
+      "arquivo": "tabela_urs_2026.pdf",
+      "sha256": "b46aafe75327d1ebbde709b0a55f5cea13d4568811086093d380c64c5f645e54"
+    }
+  ],
+  "quantidade_arquivos": 10,
+  "quantidade_chunks": 275,
+  "quantidade_documentos": 142,
+  "vector_dir": "vector"
+}
