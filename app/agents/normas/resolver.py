@@ -144,16 +144,29 @@ Não produza diagnóstico clínico.
 
 def _formatar_trechos(
     resultados: list[dict[str, Any]],
+    *,
+    max_caracteres_por_trecho: int = 1200,
+    max_caracteres_total: int = 32000,
 ) -> str:
+    """Formata trechos com orçamento seguro de contexto para o LLM."""
+
     blocos: list[str] = []
+    caracteres_usados = 0
+    separador = "\n\n--- TRECHO ---\n\n"
 
     for indice, item in enumerate(
         resultados,
         start=1,
     ):
-        arquivo = item.get("arquivo") or "desconhecido"
+        arquivo = (
+            item.get("arquivo")
+            or "desconhecido"
+        )
         pagina = item.get("pagina")
-        texto = str(item.get("texto") or "").strip()
+        texto = str(
+            item.get("texto")
+            or ""
+        ).strip()
 
         trecho_id = f"T{indice:03d}"
 
@@ -163,13 +176,42 @@ def _formatar_trechos(
             f"PAGINA: {pagina}\n"
         )
 
-        blocos.append(
-            cabecalho + texto
+        custo_separador = (
+            len(separador)
+            if blocos
+            else 0
         )
 
-    return "\n\n--- TRECHO ---\n\n".join(
-        blocos
-    )
+        espaco_restante = (
+            max_caracteres_total
+            - caracteres_usados
+            - custo_separador
+            - len(cabecalho)
+        )
+
+        if espaco_restante <= 0:
+            break
+
+        limite_texto = min(
+            max_caracteres_por_trecho,
+            espaco_restante,
+        )
+
+        bloco = (
+            cabecalho
+            + texto[:limite_texto]
+        )
+
+        blocos.append(bloco)
+
+        caracteres_usados += (
+            custo_separador
+            + len(bloco)
+        )
+
+    return separador.join(blocos)
+
+
 
 
 def filtrar_resultados_aplicaveis(
