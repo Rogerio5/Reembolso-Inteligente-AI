@@ -17,6 +17,8 @@ from app.calculo.modelos import (
     FaixaCoparticipacao,
     ParametrosCalculo,
     ProvenienciaParametro,
+    RequisitoDocumentoCondicional,
+    TetoURSCondicional,
 )
 from app.llm import criar_llm
 
@@ -868,6 +870,588 @@ def _extrair_proveniencias(
     return validas
 
 
+
+_MESES_VIGENCIA_CALCULO = {
+    "janeiro": 1,
+    "fevereiro": 2,
+    "marco": 3,
+    "abril": 4,
+    "maio": 5,
+    "junho": 6,
+    "julho": 7,
+    "agosto": 8,
+    "setembro": 9,
+    "outubro": 10,
+    "novembro": 11,
+    "dezembro": 12,
+}
+
+
+def _texto_sem_acentos(
+    texto: str,
+) -> str:
+    return "".join(
+        caractere
+        for caractere in unicodedata.normalize(
+            "NFD",
+            texto,
+        )
+        if unicodedata.category(
+            caractere
+        ) != "Mn"
+    )
+
+
+def _numero_decimal_pt(
+    valor: str,
+) -> float:
+    texto = str(valor).strip()
+
+    if "," in texto:
+        texto = (
+            texto.replace(".", "")
+            .replace(",", ".")
+        )
+
+    return float(texto)
+
+
+def _extrair_vigencia_circular_calculo(
+    texto: str,
+) -> tuple[int, int, int] | None:
+    normalizado = (
+        _texto_sem_acentos(texto)
+        .casefold()
+    )
+
+    match = re.search(
+        r"inicio\s+de\s+vigencia\s*:\s*"
+        r"(\d{1,2})(?:º|°)?\s+de\s+"
+        r"([a-z]+)\s+de\s+(\d{4})",
+        normalizado,
+    )
+
+    if not match:
+        return None
+
+    dia = int(match.group(1))
+    mes = _MESES_VIGENCIA_CALCULO.get(
+        match.group(2)
+    )
+    ano = int(match.group(3))
+
+    if mes is None:
+        return None
+
+    return (
+        ano,
+        mes,
+        dia,
+    )
+
+
+def _trechos_circular_mais_recente_calculo(
+    resultados_rag: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    por_arquivo: dict[
+        str,
+        list[dict[str, Any]],
+    ] = {}
+
+    for item in resultados_rag:
+        arquivo = str(
+            item.get("arquivo")
+            or ""
+        )
+
+        if "circular" not in arquivo.casefold():
+            continue
+
+        por_arquivo.setdefault(
+            arquivo,
+            [],
+        ).append(
+            item
+        )
+
+    vigencias: dict[
+        str,
+        tuple[int, int, int],
+    ] = {}
+
+    for arquivo, itens in por_arquivo.items():
+        texto = "\n".join(
+            str(
+                item.get("texto")
+                or ""
+            )
+            for item in itens
+        )
+
+        vigencia = (
+            _extrair_vigencia_circular_calculo(
+                texto
+            )
+        )
+
+        if vigencia is not None:
+            vigencias[arquivo] = vigencia
+
+    if not vigencias:
+        return []
+
+    maior_vigencia = max(
+        vigencias.values()
+    )
+
+    arquivos_recentes = {
+        arquivo
+        for arquivo, vigencia
+        in vigencias.items()
+        if vigencia == maior_vigencia
+    }
+
+    return [
+        item
+        for item in resultados_rag
+        if str(
+            item.get("arquivo")
+            or ""
+        ) in arquivos_recentes
+    ]
+
+
+def _dispositivo_circular_por_arquivo(
+    arquivo: str,
+) -> str | None:
+    match = re.search(
+        r"circular[_\-\s]*(\d+)"
+        r"[_\-\s]*(\d{4})",
+        arquivo,
+        flags=re.IGNORECASE,
+    )
+
+    if not match:
+        return None
+
+    numero = int(
+        match.group(1)
+    )
+
+    ano = match.group(2)
+
+    return (
+        f"CIRC-{numero:02d}-{ano}"
+    )
+
+
+
+def _extrair_limites_regulamento_deterministicos(
+    resultados_rag: list[dict[str, Any]],
+) -> tuple[set[int], set[float]]:
+    """
+    Extrai limites quantitativos e financeiros somente
+    de artigos explícitos do Regulamento.
+    """
+
+    limites_sessoes: set[int] = set()
+    limites_anuais_urs: set[float] = set()
+
+    for item in resultados_rag:
+        arquivo = str(
+            item.get("arquivo")
+            or ""
+        )
+
+        if (
+            "regulamento"
+            not in arquivo.casefold()
+        ):
+            continue
+
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        artigos = list(
+            re.finditer(
+                r"\bArt\.\s*(\d+)\.",
+                texto,
+            )
+        )
+
+        for posicao, artigo in enumerate(
+            artigos
+        ):
+            inicio = artigo.start()
+
+            fim = (
+                artigos[posicao + 1].start()
+                if posicao + 1
+                < len(artigos)
+                else len(texto)
+            )
+
+            bloco = texto[inicio:fim]
+
+            bloco_normalizado = (
+                _texto_sem_acentos(
+                    bloco
+                )
+                .casefold()
+            )
+
+            limite_sessoes = re.search(
+                r"numero\s+de\s+sessoes"
+                r".{0,180}?"
+                r"limitad[oa]\s+a\s+"
+                r"(\d+)",
+                bloco_normalizado,
+                flags=re.DOTALL,
+            )
+
+            if limite_sessoes:
+                limites_sessoes.add(
+                    int(
+                        limite_sessoes.group(1)
+                    )
+                )
+
+            limite_anual = re.search(
+                r"somatorio\s+dos\s+reembolsos"
+                r".{0,220}?"
+                r"(?:nao\s+podera\s+exceder|"
+                r"limitad[oa]\s+a)"
+                r"\s+(\d+(?:[.,]\d+)?)"
+                r"(?:\s*\([^)]*\))?"
+                r"\s+urs",
+                bloco_normalizado,
+                flags=re.DOTALL,
+            )
+
+            if limite_anual:
+                limites_anuais_urs.add(
+                    _numero_decimal_pt(
+                        limite_anual.group(1)
+                    )
+                )
+
+    return (
+        limites_sessoes,
+        limites_anuais_urs,
+    )
+
+
+
+
+def _normalizar_parametros_normativos(
+    *,
+    resultado: ParametrosCalculo,
+    resultados_rag: list[dict[str, Any]],
+    dispositivos_permitidos_set: set[str],
+) -> None:
+    """
+    Corrige parâmetros que podem variar na extração do LLM
+    usando somente valores explicitamente presentes nas normas.
+    """
+
+    texto_total = "\n".join(
+        str(
+            item.get("texto")
+            or ""
+        )
+        for item in resultados_rag
+    )
+
+    # ------------------------------------------------------
+    # Valor monetário da URS.
+    # ------------------------------------------------------
+
+    valores_urs = {
+        round(
+            _numero_decimal_pt(valor),
+            10,
+        )
+        for valor in re.findall(
+            r"\b1\s*URS\s*=\s*R\$\s*"
+            r"(\d+(?:[.,]\d+)?)",
+            texto_total,
+            flags=re.IGNORECASE,
+        )
+    }
+
+    if len(valores_urs) == 1:
+        resultado.valor_urs_brl = (
+            next(iter(valores_urs))
+        )
+
+    (
+        limites_sessoes,
+        limites_anuais_urs,
+    ) = _extrair_limites_regulamento_deterministicos(
+        resultados_rag
+    )
+
+    if len(limites_sessoes) == 1:
+        resultado.limite_sessoes_ano = (
+            next(iter(limites_sessoes))
+        )
+
+    if len(limites_anuais_urs) == 1:
+        resultado.limite_anual_urs = (
+            next(iter(limites_anuais_urs))
+        )
+
+    # ------------------------------------------------------
+    # Circular de vigência mais recente já presente no
+    # contexto normativo aplicável.
+    # ------------------------------------------------------
+
+    circular_atual = (
+        _trechos_circular_mais_recente_calculo(
+            resultados_rag
+        )
+    )
+
+    if not circular_atual:
+        return
+
+    texto_atual = "\n".join(
+        str(
+            item.get("texto")
+            or ""
+        )
+        for item in circular_atual
+    )
+
+    normalizado_atual = (
+        _texto_sem_acentos(
+            texto_atual
+        )
+        .casefold()
+    )
+
+    # ------------------------------------------------------
+    # Teto-base explicitamente dado por nova redação.
+    # Ex.: “Art. X. ... tem teto de N URS ...”
+    # ------------------------------------------------------
+
+    tetos_base = {
+        round(
+            _numero_decimal_pt(
+                quantidade
+            ),
+            10,
+        )
+        for _, quantidade in re.findall(
+            r'[“"]\s*Art\.\s*(\d+)\.\s*'
+            r'.{0,700}?'
+            r'\btem\s+teto\s+de\s*'
+            r'(\d+(?:[.,]\d+)?)\s*URS',
+            texto_atual,
+            flags=(
+                re.IGNORECASE
+                | re.DOTALL
+            ),
+        )
+    }
+
+    if len(tetos_base) == 1:
+        resultado.quantidade_urs = (
+            next(iter(tetos_base))
+        )
+
+    # ------------------------------------------------------
+    # Teto condicional.
+    # O valor vem da circular atual.
+    # A definição de quantidade de sessões pode estar em
+    # norma anterior quando a emenda diz que a mantém.
+    # ------------------------------------------------------
+
+    valores_condicionais = {
+        round(
+            _numero_decimal_pt(valor),
+            10,
+        )
+        for valor in re.findall(
+            r"nessa\s+hipotese\s+"
+            r"o\s+teto\s+e\s+de\s*"
+            r"(\d+(?:[.,]\d+)?)\s*urs",
+            normalizado_atual,
+        )
+    }
+
+    texto_total_normalizado = (
+        _texto_sem_acentos(
+            texto_total
+        )
+        .casefold()
+    )
+
+    minimos_sessoes = {
+        int(valor)
+        for valor in re.findall(
+            r"pelo\s+menos\s+(\d+)"
+            r"(?:\s*\([^)]*\))?"
+            r"\s+sessoes\s+realizadas"
+            r"\s+no\s+ano\s+civil",
+            texto_total_normalizado,
+        )
+    }
+
+    if len(valores_condicionais) == 1:
+        sessoes_min = (
+            next(
+                iter(minimos_sessoes)
+            )
+            if len(minimos_sessoes) == 1
+            else None
+        )
+
+        resultado.tetos_urs_condicionais = [
+            TetoURSCondicional(
+                sessoes_min_inclusivo=(
+                    sessoes_min
+                ),
+                sessoes_max_inclusivo=None,
+                quantidade_urs=next(
+                    iter(
+                        valores_condicionais
+                    )
+                ),
+            )
+        ]
+
+    # ------------------------------------------------------
+    # Requisito documental condicional.
+    # Condições alternativas:
+    # - sessão mínima;
+    # - percentual acima do teto.
+    # ------------------------------------------------------
+
+    sessoes_relatorio = {
+        int(valor)
+        for valor in re.findall(
+            r"sessao\s+for\s+a\s+"
+            r"(\d+)(?:a|ª|º)?"
+            r"\s+ou\s+posterior",
+            normalizado_atual,
+        )
+    }
+
+    percentuais_relatorio = {
+        round(
+            _numero_decimal_pt(valor),
+            10,
+        )
+        for valor in re.findall(
+            r"exceder\s+em\s+mais\s+de\s+"
+            r"(\d+(?:[.,]\d+)?)\s*%",
+            normalizado_atual,
+        )
+    }
+
+    documento_match = re.search(
+        r"(relat[oó]rio\s+cl[ií]nico)",
+        texto_atual,
+        flags=re.IGNORECASE,
+    )
+
+    if (
+        documento_match
+        and len(sessoes_relatorio) == 1
+        and len(percentuais_relatorio) == 1
+    ):
+        percentual = next(
+            iter(
+                percentuais_relatorio
+            )
+        )
+
+        if 1 < percentual <= 100:
+            percentual = (
+                percentual / 100
+            )
+
+        dispositivos: list[str] = []
+
+        arquivos_circular = {
+            str(
+                item.get("arquivo")
+                or ""
+            )
+            for item in circular_atual
+        }
+
+        for arquivo in arquivos_circular:
+            dispositivo = (
+                _dispositivo_circular_por_arquivo(
+                    arquivo
+                )
+            )
+
+            if (
+                dispositivo
+                and dispositivo
+                in dispositivos_permitidos_set
+            ):
+                dispositivos.append(
+                    dispositivo
+                )
+
+        artigo_match = re.search(
+            r"§\s*\d+º?\s+do\s+art\.\s*"
+            r"(\d+)"
+            r".{0,700}?"
+            r"relat[oó]rio\s+cl[ií]nico",
+            texto_atual,
+            flags=(
+                re.IGNORECASE
+                | re.DOTALL
+            ),
+        )
+
+        if artigo_match:
+            dispositivo_artigo = (
+                f"ART-{artigo_match.group(1)}"
+            )
+
+            if (
+                dispositivo_artigo
+                in dispositivos_permitidos_set
+            ):
+                dispositivos.append(
+                    dispositivo_artigo
+                )
+
+        dispositivos = list(
+            dict.fromkeys(
+                dispositivos
+            )
+        )
+
+        resultado.requisitos_documentais_condicionais = [
+            RequisitoDocumentoCondicional(
+                documento=(
+                    documento_match.group(1)
+                ),
+                categoria_documento=None,
+                sessoes_min_inclusivo=next(
+                    iter(
+                        sessoes_relatorio
+                    )
+                ),
+                excedente_teto_percentual=(
+                    percentual
+                ),
+                operador="OR",
+                dispositivos=dispositivos,
+            )
+        ]
+
+
+
 def _selecionar_trechos_calculo(
     resultados_rag: list[dict[str, Any]],
     *,
@@ -956,20 +1540,11 @@ def extrair_parametros_calculo(
         ParametrosCalculo
     )
 
-    fontes_descartadas = {
-        str(item)
-        for item in (
-            resolucao_normativa.get(
-                "fontes_descartadas"
-            )
-            or []
-        )
-        if item
-    }
-
+    # resultados_rag já contém somente os trechos considerados
+    # aplicáveis pelo agente de normas. Não descarte novamente
+    # um arquivo inteiro nesta etapa de extração.
     trechos = _selecionar_trechos_calculo(
         resultados_rag,
-        fontes_descartadas=fontes_descartadas,
     )
 
     dispositivos_permitidos = [
@@ -1020,6 +1595,14 @@ def extrair_parametros_calculo(
         dispositivos_permitidos
     )
 
+    _normalizar_parametros_normativos(
+        resultado=resultado,
+        resultados_rag=resultados_rag,
+        dispositivos_permitidos_set=(
+            dispositivos_permitidos_set
+        ),
+    )
+
     faixas_coparticipacao = (
         _extrair_faixas_coparticipacao(
             trechos
@@ -1034,6 +1617,18 @@ def extrair_parametros_calculo(
     for requisito in (
         resultado.requisitos_documentais_condicionais
     ):
+        if (
+            requisito.excedente_teto_percentual
+            is not None
+            and 1
+            < requisito.excedente_teto_percentual
+            <= 100
+        ):
+            requisito.excedente_teto_percentual = (
+                requisito.excedente_teto_percentual
+                / 100
+            )
+
         categoria_exigida = (
             classificar_categoria_documento_exigido(
                 requisito.documento

@@ -24,6 +24,71 @@ from app.calculo.teto_condicional import (
 from app.tools.operadora import abrir_protocolo
 
 
+def _contar_sessoes_terapia_historico(
+    *,
+    historico: dict,
+    documento: dict,
+) -> int | None:
+    """Conta sessões anteriores usando somente o histórico MCP."""
+
+    pedidos = historico.get("pedidos") or []
+
+    if not isinstance(pedidos, list):
+        return None
+
+    data_atual = str(
+        documento.get("data_atendimento")
+        or documento.get("data_servico")
+        or documento.get("data_procedimento")
+        or documento.get("data")
+        or ""
+    ).strip()
+
+    if (
+        len(data_atual) < 10
+        or not data_atual[:4].isdigit()
+    ):
+        return None
+
+    ano_atual = data_atual[:4]
+    contador = 0
+
+    for pedido in pedidos:
+        if not isinstance(pedido, dict):
+            continue
+
+        categoria = str(
+            pedido.get("categoria")
+            or ""
+        ).strip().upper()
+
+        if categoria != "SESSAO_TERAPIA":
+            continue
+
+        data_pedido = str(
+            pedido.get("data_atendimento")
+            or pedido.get("data")
+            or ""
+        ).strip()
+
+        if not data_pedido.startswith(
+            f"{ano_atual}-"
+        ):
+            continue
+
+        # O pedido atual ainda não deve fazer parte
+        # da quantidade de sessões já utilizadas.
+        if (
+            len(data_pedido) >= 10
+            and data_pedido >= data_atual
+        ):
+            continue
+
+        contador += 1
+
+    return contador
+
+
 async def decisao_node(
     state: AgentState,
 ) -> AgentState:
@@ -63,9 +128,26 @@ async def decisao_node(
         "valor_solicitado_brl"
     )
 
-    sessoes_utilizadas = beneficiario.get(
-        "sessoes_terapia_ano"
-    )
+    sessoes_utilizadas = None
+
+    if (
+        str(
+            state.get("categoria_documento")
+            or ""
+        )
+        == "SESSAO_TERAPIA"
+    ):
+        sessoes_utilizadas = (
+            _contar_sessoes_terapia_historico(
+                historico=historico,
+                documento=documento,
+            )
+        )
+
+    if sessoes_utilizadas is None:
+        sessoes_utilizadas = beneficiario.get(
+            "sessoes_terapia_ano"
+        )
 
     if sessoes_utilizadas is not None:
         parametros.sessoes_utilizadas_ano = int(
@@ -210,17 +292,76 @@ async def decisao_node(
             in categorias_presentes
         )
 
-        if not documento_presente:
-            regras_obrigatorias_runtime.extend(
-                requisito.dispositivos
-            )
+        # A regra documental foi aplicada ao caso mesmo
+        # quando o documento exigido já foi apresentado.
+        # Portanto seus dispositivos permanecem na
+        # rastreabilidade final.
+        regras_obrigatorias_runtime.extend(
+            requisito.dispositivos
+        )
 
+        if not documento_presente:
             pendencias_documentais.append(
                 f"Envie o documento exigido: "
                 f"{requisito.documento}."
             )
 
     if pendencias_documentais:
+        numero_protocolo = state.get(
+            "protocolo"
+        )
+
+        if not numero_protocolo:
+            carteirinha = state.get(
+                "carteirinha"
+            )
+
+            if not carteirinha:
+                raise RuntimeError(
+                    "Carteirinha ausente para abertura "
+                    "do protocolo."
+                )
+
+            protocolo_mcp = await abrir_protocolo(
+                carteirinha=str(carteirinha),
+                payload={
+                    "session_id": state.get(
+                        "session_id"
+                    ),
+                    "categoria_documento": (
+                        state.get(
+                            "categoria_documento"
+                        )
+                    ),
+                    "valor_solicitado_brl": (
+                        valor_solicitado
+                    ),
+                    "regras_aplicadas": (
+                        state.get(
+                            "regras_aplicadas"
+                        )
+                        or []
+                    ),
+                    "motivo": (
+                        "Pedido pendente de documento "
+                        "complementar exigido pelas "
+                        "regras aplicáveis."
+                    ),
+                },
+            )
+
+            numero_protocolo = (
+                protocolo_mcp.get(
+                    "protocolo"
+                )
+            )
+
+            if not numero_protocolo:
+                raise RuntimeError(
+                    "MCP não retornou número "
+                    "de protocolo."
+                )
+
         return {
             **state,
             "agente_atual": "decisao",
@@ -238,6 +379,9 @@ async def decisao_node(
                 dict.fromkeys(
                     regras_obrigatorias_runtime
                 )
+            ),
+            "protocolo": str(
+                numero_protocolo
             ),
             "pendencias": [
                 *pendencias_base,
@@ -462,12 +606,47 @@ async def decisao_node(
             "concluido": True,
         }
 
+    print()
+    print("==========================================")
+    print("DIAGNOSTICO PARAMETROS ANTES DO MOTOR")
+    print("==========================================")
+    print("VALOR_SOLICITADO=", state.get("valor_solicitado_brl"))
+    print("VALOR_URS_BRL=", parametros.valor_urs_brl)
+    print("QUANTIDADE_URS=", parametros.quantidade_urs)
+    print("TETO_BRL=", parametros.teto_brl)
+    print(
+        "PERCENTUAL_COPARTICIPACAO=",
+        parametros.percentual_coparticipacao,
+    )
+    print("LIMITE_ANUAL_URS=", parametros.limite_anual_urs)
+    print("SALDO_ANUAL_BRL=", parametros.saldo_anual_brl)
+    print(
+        "SESSOES_UTILIZADAS_ANO=",
+        parametros.sessoes_utilizadas_ano,
+    )
+    print("PLANO=", plano)
+    print("DATA_ADESAO=", data_adesao_texto)
+    print("DATA_ATENDIMENTO=", data_atendimento_texto)
+
     resultado = calcular_reembolso(
         valor_solicitado_brl=state.get(
             "valor_solicitado_brl"
         ),
         parametros=parametros,
     )
+
+    print("RESULTADO_CALCULAVEL=", resultado.calculavel)
+    print(
+        "RESULTADO_DECISAO=",
+        resultado.decisao.value
+        if resultado.decisao
+        else None,
+    )
+    print(
+        "RESULTADO_VALOR_REEMBOLSO=",
+        resultado.valor_reembolso_brl,
+    )
+    print("RESULTADO_MOTIVO=", resultado.motivo)
 
     return {
         **state,
@@ -494,6 +673,17 @@ async def decisao_node(
             *resultado.pendencias,
         ],
         "pendencias_documentais_mensagens": [],
+
+        "regras_obrigatorias_runtime": list(
+            dict.fromkeys(
+                regras_obrigatorias_runtime
+            )
+        ),
+        "protocolo": (
+            None
+            if resultado.decisao is not None
+            else state.get("protocolo")
+        ),
         "proximo_agente": None,
         "concluido": True,
     }

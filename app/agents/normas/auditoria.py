@@ -669,6 +669,141 @@ def _auditoria_operacional_deterministica(
     return regras
 
 
+
+def _regras_referenciadas_por_operacoes(
+    *,
+    resultados_rag: list[dict[str, Any]],
+    operacoes_utilizadas: list[str],
+) -> list[str]:
+    """
+    Descobre dispositivos diretamente sustentados pelos textos
+    normativos e pelas operações realmente executadas pelo motor.
+
+    Os números dos artigos não são conhecidos previamente.
+    """
+
+    operacoes = set(
+        operacoes_utilizadas
+        or []
+    )
+
+    regras: list[str] = []
+
+    def adicionar(
+        dispositivo: str,
+    ) -> None:
+        if (
+            dispositivo
+            and dispositivo not in regras
+        ):
+            regras.append(
+                dispositivo
+            )
+
+    for item in resultados_rag:
+
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        texto_normalizado = (
+            _normalizar_semantica(
+                texto
+            )
+        )
+
+        secoes = _secoes_por_artigo(
+            texto
+        )
+
+        # --------------------------------------------------
+        # Conversão do teto do procedimento para reais.
+        # --------------------------------------------------
+
+        if (
+            "determinar_teto_procedimento"
+            in operacoes
+        ):
+            for dispositivo, secao in secoes:
+
+                secao_normalizada = (
+                    _normalizar_semantica(
+                        secao
+                    )
+                )
+
+                trata_conversao = (
+                    "teto de cada procedimento"
+                    in secao_normalizada
+                    and "urs"
+                    in secao_normalizada
+                    and (
+                        "multiplic"
+                        in secao_normalizada
+                        or "corresponde"
+                        in secao_normalizada
+                    )
+                )
+
+                if trata_conversao:
+                    adicionar(
+                        dispositivo
+                    )
+
+            # Também aceita referência cruzada explícita:
+            # "art. N ... teto em reais / multiplicação".
+            for numero in re.findall(
+                r"art\.\s*(\d+)"
+                r".{0,260}?"
+                r"(?:teto\s+em\s+reais|"
+                r"multiplic[a-z]*\s+"
+                r"(?:da\s+)?quantidade\s+de\s+urs)",
+                texto_normalizado,
+                flags=re.DOTALL,
+            ):
+                adicionar(
+                    f"ART-{numero}"
+                )
+
+        # --------------------------------------------------
+        # Arredondamento realmente executado pelo motor.
+        # --------------------------------------------------
+
+        if (
+            "arredondar_valor_final"
+            in operacoes
+        ):
+            for dispositivo, secao in secoes:
+
+                if (
+                    "arredond"
+                    in _normalizar_semantica(
+                        secao
+                    )
+                ):
+                    adicionar(
+                        dispositivo
+                    )
+
+            # Tabelas podem referenciar o artigo sem trazer
+            # o artigo completo no mesmo trecho.
+            for numero in re.findall(
+                r"arredond[a-z]*"
+                r".{0,260}?"
+                r"art\.\s*(\d+)",
+                texto_normalizado,
+                flags=re.DOTALL,
+            ):
+                adicionar(
+                    f"ART-{numero}"
+                )
+
+    return regras
+
+
+
+
 def auditar_regras_aplicadas(
     *,
     dispositivos_candidatos: list[str],
@@ -717,7 +852,12 @@ def auditar_regras_aplicadas(
             )
         )
 
-    regras_referenciadas_operacoes: list[str] = []
+    regras_referenciadas_operacoes = (
+        _regras_referenciadas_por_operacoes(
+            resultados_rag=resultados_rag,
+            operacoes_utilizadas=operacoes_utilizadas,
+        )
+    )
 
     for item in resultados_rag:
         texto = str(
@@ -830,6 +970,7 @@ def auditar_regras_aplicadas(
             dict.fromkeys(
                 [
                     *regras_deterministicas,
+                    *regras_referenciadas_operacoes,
                     *regras_proveniencia_operacoes,
                 ]
             )

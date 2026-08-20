@@ -82,10 +82,13 @@ async def normas_node(
             indice == len(consultas) - 1
         )
 
+        # Mantém diversidade suficiente nas consultas
+        # normativas. Algumas fontes essenciais podem
+        # aparecer logo após os dois primeiros resultados.
         limite_resultados = (
             5
             if consulta_documental
-            else 2
+            else 3
         )
 
         grupos_resultados.append(

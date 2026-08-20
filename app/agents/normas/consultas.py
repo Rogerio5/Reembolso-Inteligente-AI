@@ -38,8 +38,16 @@ def construir_consultas_normativas(
             f"e coparticipação?\nContexto: {contexto}"
         ),
         (
-            "Quais são os limites anuais, saldos, limites de sessões "
-            "ou outras restrições acumuladas aplicáveis a este caso?"
+            "Quais são os limites anuais quantitativos de sessões ou "
+            "utilizações aplicáveis a esta categoria e como a contagem "
+            "deve ser feita?"
+            f"\nContexto: {contexto}"
+        ),
+        (
+            "Existe limite anual acumulado de reembolsos aplicável ao "
+            "beneficiário, expresso em URS ou valor monetário? Explique "
+            "como o saldo anual é apurado e como ele limita o valor do "
+            "pedido atual."
             f"\nContexto: {contexto}"
         ),
         (
@@ -63,10 +71,16 @@ def construir_consultas_normativas(
             f"\nContexto: {contexto}"
         ),
         (
-            "Quais são as exigências documentais aplicáveis a este caso, "
-            "incluindo documentos complementares condicionais, campos "
-            "obrigatórios, situações de pendência documental e condições "
-            "que impedem a apuração do valor até a regularização?"
+            "Quais são as exigências documentais vigentes aplicáveis "
+            "a este caso? Verifique também se norma, circular ou ato "
+            "posterior vigente na data do atendimento alterou a redação "
+            "anterior sobre documento complementar exigido, relatório "
+            "clínico, momento ou quantidade de sessões, limite ou outra "
+            "condição que passe a exigir esse documento, pendência pela "
+            "ausência do documento e validade do documento para "
+            "atendimentos subsequentes. Quando houver redações sucessivas, "
+            "recupere a alteração normativa posterior e considere a "
+            "vigência na data do atendimento, e não a numeração do ato."
             f"\nContexto: {contexto}"
         ),
     ]

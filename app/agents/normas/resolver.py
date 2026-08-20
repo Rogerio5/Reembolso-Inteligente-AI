@@ -8,6 +8,7 @@ recuperados da kb/.
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import date
 from typing import Any
 
@@ -114,6 +115,16 @@ Regras obrigatórias:
     e decisão realmente aplicáveis ao caso.
 27. Material auxiliar não deve substituir texto normativo superior
     quando houver conflito.
+28. Diferencie limites quantitativos de utilização ou sessões de limites
+    financeiros acumulados de reembolso. Se ambos forem aplicáveis,
+    trate-os como regras independentes e preserve os dispositivos que
+    sustentam cada um.
+29. Se um trecho normativo estabelecer parâmetro que possa limitar
+    diretamente o valor final, como limite acumulado ou regra de saldo,
+    inclua o dispositivo correspondente e o TRECHO_ID que o sustenta.
+30. Não omita um limite financeiro acumulado apenas porque a categoria
+    também possui limite quantitativo de sessões, atendimentos ou
+    utilizações.
 28. Uma norma posterior que altere apenas determinados dispositivos NÃO
     elimina as demais regras-base aplicáveis do Regulamento, tabela, nota
     técnica ou anexos que não tenham sido expressamente alteradas.
@@ -397,6 +408,559 @@ def _trechos_circular_mais_recente(
     ]
 
 
+def _trechos_valor_urs_explicito(
+    resultados: list[dict[str, Any]],
+    trechos_aplicaveis: list[str],
+) -> list[str]:
+    """Preserva a definição monetária da URS quando o caso usa URS."""
+
+    indices_aplicaveis: set[int] = set()
+
+    for trecho_id in trechos_aplicaveis:
+        texto_id = str(trecho_id).strip().upper()
+
+        if (
+            len(texto_id) != 4
+            or not texto_id.startswith("T")
+            or not texto_id[1:].isdigit()
+        ):
+            continue
+
+        indice = int(texto_id[1:]) - 1
+
+        if 0 <= indice < len(resultados):
+            indices_aplicaveis.add(indice)
+
+    usa_urs = any(
+        "urs" in str(
+            resultados[indice].get("texto")
+            or ""
+        ).casefold()
+        for indice in indices_aplicaveis
+    )
+
+    if not usa_urs:
+        return []
+
+    padrao_valor_urs = re.compile(
+        r"\b1\s*URS\s*=\s*R\$\s*\d",
+        flags=re.IGNORECASE,
+    )
+
+    return [
+        f"T{indice:03d}"
+        for indice, item in enumerate(
+            resultados,
+            start=1,
+        )
+        if padrao_valor_urs.search(
+            str(item.get("texto") or "")
+        )
+    ]
+
+
+
+def _normalizar_texto_estrutural(
+    texto: str,
+) -> str:
+    """Normaliza texto normativo para buscas estruturais."""
+
+    return "".join(
+        caractere
+        for caractere in unicodedata.normalize(
+            "NFD",
+            texto,
+        )
+        if unicodedata.category(
+            caractere
+        ) != "Mn"
+    ).casefold()
+
+
+def _dispositivo_circular_estrutural(
+    arquivo: str,
+) -> str | None:
+    """Obtém identificador canônico a partir do próprio nome do ato."""
+
+    match = re.search(
+        r"circular[_\-\s]*(\d+)"
+        r"[_\-\s]*(\d{4})",
+        arquivo,
+        flags=re.IGNORECASE,
+    )
+
+    if not match:
+        return None
+
+    return (
+        f"CIRC-{int(match.group(1)):02d}-"
+        f"{match.group(2)}"
+    )
+
+
+def _dispositivos_alterados_circular_vigente(
+    resultados: list[dict[str, Any]],
+    trechos_circular: list[str],
+) -> list[str]:
+    """
+    Identifica dispositivos efetivamente alterados pela circular
+    vigente usando a estrutura textual do próprio ato.
+    """
+
+    artigos: set[str] = set()
+    dispositivos: list[str] = []
+
+    for trecho_id in trechos_circular:
+        texto_id = str(
+            trecho_id
+        ).strip().upper()
+
+        if (
+            len(texto_id) != 4
+            or not texto_id.startswith("T")
+            or not texto_id[1:].isdigit()
+        ):
+            continue
+
+        indice = int(
+            texto_id[1:]
+        ) - 1
+
+        if not (
+            0 <= indice < len(resultados)
+        ):
+            continue
+
+        item = resultados[indice]
+
+        arquivo = str(
+            item.get("arquivo")
+            or ""
+        )
+
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        dispositivo_circular = (
+            _dispositivo_circular_estrutural(
+                arquivo
+            )
+        )
+
+        if (
+            dispositivo_circular
+            and dispositivo_circular
+            not in dispositivos
+        ):
+            dispositivos.append(
+                dispositivo_circular
+            )
+
+        # Exemplo estrutural:
+        # "dá nova redação aos arts. X e Y"
+        for match in re.finditer(
+            r"d[aá]\s+nova\s+reda[cç][aã]o\s+"
+            r"aos?\s+arts?\.?\s+"
+            r"([0-9,\se]+)",
+            texto,
+            flags=re.IGNORECASE,
+        ):
+            artigos.update(
+                re.findall(
+                    r"\d+",
+                    match.group(1),
+                )
+            )
+
+        # Em uma construção "art. X ... passa a vigorar",
+        # o dispositivo alterado é a última referência
+        # de artigo imediatamente anterior ao verbo.
+        for vigorar in re.finditer(
+            r"passam?\s+a\s+vigorar",
+            texto,
+            flags=re.IGNORECASE,
+        ):
+            inicio = max(
+                0,
+                vigorar.start() - 220,
+            )
+
+            janela = texto[
+                inicio:vigorar.start()
+            ]
+
+            referencias = re.findall(
+                r"\bart\.\s*(\d+)",
+                janela,
+                flags=re.IGNORECASE,
+            )
+
+            if referencias:
+                artigos.add(
+                    referencias[-1]
+                )
+
+    for artigo in sorted(
+        artigos,
+        key=int,
+    ):
+        dispositivo = (
+            f"ART-{artigo}"
+        )
+
+        if dispositivo not in dispositivos:
+            dispositivos.append(
+                dispositivo
+            )
+
+    return dispositivos
+
+
+def _regras_limite_sessoes_estrutural(
+    resultados: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    """
+    Preserva trechos do Regulamento que contenham um limite
+    quantitativo explícito de sessões.
+
+    O artigo e o valor são lidos do próprio texto normativo.
+    """
+
+    trechos: list[str] = []
+    dispositivos: list[str] = []
+
+    for indice_resultado, item in enumerate(
+        resultados,
+        start=1,
+    ):
+        arquivo = str(
+            item.get("arquivo")
+            or ""
+        )
+
+        if (
+            "regulamento"
+            not in arquivo.casefold()
+        ):
+            continue
+
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        artigos = list(
+            re.finditer(
+                r"\bArt\.\s*(\d+)\.",
+                texto,
+            )
+        )
+
+        for posicao, artigo in enumerate(
+            artigos
+        ):
+            inicio = artigo.start()
+
+            fim = (
+                artigos[posicao + 1].start()
+                if posicao + 1
+                < len(artigos)
+                else len(texto)
+            )
+
+            bloco = texto[
+                inicio:fim
+            ]
+
+            bloco_normalizado = (
+                _normalizar_texto_estrutural(
+                    bloco
+                )
+            )
+
+            limite = re.search(
+                r"numero\s+de\s+sessoes"
+                r".{0,160}?"
+                r"limitad[oa]\s+a\s+"
+                r"\d+",
+                bloco_normalizado,
+                flags=re.DOTALL,
+            )
+
+            if not limite:
+                continue
+
+            trecho_id = (
+                f"T{indice_resultado:03d}"
+            )
+
+            dispositivo = (
+                f"ART-{artigo.group(1)}"
+            )
+
+            if trecho_id not in trechos:
+                trechos.append(
+                    trecho_id
+                )
+
+            if (
+                dispositivo
+                not in dispositivos
+            ):
+                dispositivos.append(
+                    dispositivo
+                )
+
+    return (
+        trechos,
+        dispositivos,
+    )
+
+
+
+
+
+def _regras_limite_anual_estrutural(
+    resultados: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    """Preserva regra explícita de limite financeiro anual."""
+
+    trechos: list[str] = []
+    dispositivos: list[str] = []
+
+    for indice_resultado, item in enumerate(
+        resultados,
+        start=1,
+    ):
+        arquivo = str(
+            item.get("arquivo")
+            or ""
+        )
+
+        if (
+            "regulamento"
+            not in arquivo.casefold()
+        ):
+            continue
+
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        artigos = list(
+            re.finditer(
+                r"\bArt\.\s*(\d+)\.",
+                texto,
+            )
+        )
+
+        for posicao, artigo in enumerate(
+            artigos
+        ):
+            inicio = artigo.start()
+
+            fim = (
+                artigos[posicao + 1].start()
+                if posicao + 1
+                < len(artigos)
+                else len(texto)
+            )
+
+            bloco = texto[inicio:fim]
+
+            bloco_normalizado = (
+                _normalizar_texto_estrutural(
+                    bloco
+                )
+            )
+
+            limite = re.search(
+                r"somatorio\s+dos\s+reembolsos"
+                r".{0,220}?"
+                r"(?:nao\s+podera\s+exceder|"
+                r"limitad[oa]\s+a)"
+                r"\s+\d+"
+                r"(?:\s*\([^)]*\))?"
+                r"\s+urs",
+                bloco_normalizado,
+                flags=re.DOTALL,
+            )
+
+            if not limite:
+                continue
+
+            trecho_id = (
+                f"T{indice_resultado:03d}"
+            )
+
+            dispositivo = (
+                f"ART-{artigo.group(1)}"
+            )
+
+            if trecho_id not in trechos:
+                trechos.append(
+                    trecho_id
+                )
+
+            if (
+                dispositivo
+                not in dispositivos
+            ):
+                dispositivos.append(
+                    dispositivo
+                )
+
+    return (
+        trechos,
+        dispositivos,
+    )
+
+
+def _circulares_substituidas_pela_vigente(
+    resultados: list[dict[str, Any]],
+    trechos_circular: list[str],
+) -> set[str]:
+    """
+    Identifica circular anterior cuja redação é explicitamente
+    substituída pela circular vigente.
+    """
+
+    substituidas: set[str] = set()
+
+    for trecho_id in trechos_circular:
+        texto_id = str(
+            trecho_id
+        ).strip().upper()
+
+        if (
+            len(texto_id) != 4
+            or not texto_id.startswith("T")
+            or not texto_id[1:].isdigit()
+        ):
+            continue
+
+        indice = int(
+            texto_id[1:]
+        ) - 1
+
+        if not (
+            0 <= indice < len(resultados)
+        ):
+            continue
+
+        texto = str(
+            resultados[indice].get(
+                "texto"
+            )
+            or ""
+        )
+
+        for match in re.finditer(
+            r"na\s+reda[cç][aã]o\s+dada\s+pela\s+"
+            r"circular\s+(\d+)\s*/\s*(\d{4})"
+            r".{0,220}?"
+            r"passa\s+a\s+vigorar",
+            texto,
+            flags=(
+                re.IGNORECASE
+                | re.DOTALL
+            ),
+        ):
+            substituidas.add(
+                "CIRC-"
+                f"{int(match.group(1)):02d}-"
+                f"{match.group(2)}"
+            )
+
+    return substituidas
+
+
+
+
+
+def _trechos_definicao_acompanhamento_estrutural(
+    resultados: list[dict[str, Any]],
+) -> list[str]:
+    """
+    Preserva a definição normativa de acompanhamento continuado
+    quando o próprio texto recuperado fornece um único limiar
+    quantitativo consistente.
+
+    Nenhum número de sessões é hardcoded aqui.
+    """
+
+    candidatos_por_limiar: dict[
+        int,
+        list[str],
+    ] = {}
+
+    for indice, item in enumerate(
+        resultados,
+        start=1,
+    ):
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        texto_normalizado = (
+            _normalizar_texto_estrutural(
+                texto
+            )
+        )
+
+        match = re.search(
+            r"considera-se\s+"
+            r"acompanhamento\s+continuado"
+            r".{0,360}?"
+            r"pelo\s+menos\s+"
+            r"(\d+)"
+            r"(?:\s*\([^)]*\))?"
+            r"\s+sessoes\s+realizadas"
+            r"\s+no\s+ano\s+civil",
+            texto_normalizado,
+            flags=re.DOTALL,
+        )
+
+        if not match:
+            continue
+
+        limiar = int(
+            match.group(1)
+        )
+
+        trecho_id = (
+            f"T{indice:03d}"
+        )
+
+        candidatos_por_limiar.setdefault(
+            limiar,
+            [],
+        ).append(
+            trecho_id
+        )
+
+    # Só preserva deterministicamente se todas as
+    # evidências recuperadas concordarem no mesmo limiar.
+    if len(candidatos_por_limiar) != 1:
+        return []
+
+    return list(
+        dict.fromkeys(
+            next(
+                iter(
+                    candidatos_por_limiar.values()
+                )
+            )
+        )
+    )
+
+
+
+
 def resolver_normas(
     consulta: str,
     data_atendimento: date | str | None,
@@ -505,9 +1069,84 @@ Explique brevemente a precedência/vigência utilizada.
         )
     )
 
-    resultado.dispositivos_canonicos = (
-        normalizar_dispositivos(
+    trechos_valor_urs = (
+        _trechos_valor_urs_explicito(
+            resultados_rag,
+            resultado.trechos_aplicaveis,
+        )
+    )
+
+    resultado.trechos_aplicaveis = list(
+        dict.fromkeys(
+            [
+                *resultado.trechos_aplicaveis,
+                *trechos_valor_urs,
+            ]
+        )
+    )
+
+    (
+        trechos_limite_sessoes,
+        dispositivos_limite_sessoes,
+    ) = _regras_limite_sessoes_estrutural(
+        resultados_rag
+    )
+
+    (
+        trechos_limite_anual,
+        dispositivos_limite_anual,
+    ) = _regras_limite_anual_estrutural(
+        resultados_rag
+    )
+
+    trechos_definicao_acompanhamento = (
+        _trechos_definicao_acompanhamento_estrutural(
+            resultados_rag
+        )
+    )
+
+    resultado.trechos_aplicaveis = list(
+        dict.fromkeys(
+            [
+                *resultado.trechos_aplicaveis,
+                *trechos_limite_sessoes,
+                *trechos_limite_anual,
+                *trechos_definicao_acompanhamento,
+            ]
+        )
+    )
+
+    dispositivos_circular_vigente = (
+        _dispositivos_alterados_circular_vigente(
+            resultados_rag,
+            trechos_vigencia,
+        )
+    )
+
+    circulares_substituidas = (
+        _circulares_substituidas_pela_vigente(
+            resultados_rag,
+            trechos_vigencia,
+        )
+    )
+
+    dispositivos_llm = [
+        dispositivo
+        for dispositivo in normalizar_dispositivos(
             resultado.dispositivos
+        )
+        if dispositivo
+        not in circulares_substituidas
+    ]
+
+    resultado.dispositivos_canonicos = list(
+        dict.fromkeys(
+            [
+                *dispositivos_llm,
+                *dispositivos_circular_vigente,
+                *dispositivos_limite_sessoes,
+                *dispositivos_limite_anual,
+            ]
         )
     )
 
