@@ -47,6 +47,7 @@ class AgentState(TypedDict, total=False):
     proximo_agente: str | None
     handoff_reason: str | None
     concluido: bool
+    encerrar_apos_triagem: bool
 
     # Resposta final
     resposta: str

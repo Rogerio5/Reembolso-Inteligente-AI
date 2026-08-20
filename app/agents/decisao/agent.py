@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 
+import re
+import unicodedata
+
 from app.agents.state import AgentState
 from app.calculo.coparticipacao import (
     selecionar_percentual_coparticipacao,
@@ -12,6 +15,7 @@ from app.calculo.limite_anual import (
     calcular_saldo_anual,
 )
 from app.calculo.motor import calcular_reembolso
+from app.calculo.modelos import ProvenienciaParametro
 from app.calculo.parametros import (
     extrair_parametros_calculo,
 )
@@ -89,6 +93,133 @@ def _contar_sessoes_terapia_historico(
     return contador
 
 
+def _normalizar_texto_opme(
+    texto: str,
+) -> str:
+    """Normaliza texto somente para comparação estrutural."""
+
+    return "".join(
+        caractere
+        for caractere in unicodedata.normalize(
+            "NFKD",
+            str(texto or ""),
+        )
+        if not unicodedata.combining(
+            caractere
+        )
+    ).casefold()
+
+
+def _regras_opme_tuss_analise_humana_estrutural(
+    *,
+    categoria: str | None,
+    codigo_tuss: str | None,
+    resultados_rag: list[dict],
+) -> list[str]:
+    """
+    Usa exclusivamente a linha TUSS da categoria MATERIAL_OPME.
+
+    A decisão estrutural depende de o próprio registro normativo
+    indicar item sob análise ou ausência de teto automatizado.
+    O número do artigo é extraído do texto da fonte.
+    """
+
+    if (
+        str(categoria or "").strip().upper()
+        != "MATERIAL_OPME"
+    ):
+        return []
+
+    codigo = str(
+        codigo_tuss or ""
+    ).strip()
+
+    if not codigo:
+        return []
+
+    regras: list[str] = []
+
+    for item in resultados_rag:
+        arquivo = str(
+            item.get("arquivo")
+            or ""
+        ).casefold()
+
+        if "tabela_urs" not in arquivo:
+            continue
+
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        inicio = texto.find(codigo)
+
+        if inicio < 0:
+            continue
+
+        depois_codigo = (
+            inicio + len(codigo)
+        )
+
+        restante = texto[
+            depois_codigo:
+        ]
+
+        proximo_codigo = re.search(
+            rf"\b\d{{{len(codigo)}}}\b",
+            restante,
+        )
+
+        if proximo_codigo:
+            fim = (
+                depois_codigo
+                + proximo_codigo.start()
+            )
+        else:
+            fim = min(
+                len(texto),
+                depois_codigo + 900,
+            )
+
+        registro = texto[
+            inicio:fim
+        ]
+
+        normalizado = (
+            _normalizar_texto_opme(
+                registro
+            )
+        )
+
+        if "opme" not in normalizado:
+            continue
+
+        if (
+            "sob analise"
+            not in normalizado
+            and "sem teto automatizado"
+            not in normalizado
+        ):
+            continue
+
+        for artigo in re.finditer(
+            r"\bart\.?\s*(\d+)\b",
+            normalizado,
+            flags=re.IGNORECASE,
+        ):
+            dispositivo = (
+                f"ART-{artigo.group(1)}"
+            )
+
+            if dispositivo not in regras:
+                regras.append(
+                    dispositivo
+                )
+
+    return regras
+
+
 async def decisao_node(
     state: AgentState,
 ) -> AgentState:
@@ -123,6 +254,56 @@ async def decisao_node(
         resolucao_normativa=resolucao,
         resultados_rag=resultados_rag,
     )
+
+    regras_opme_estruturais = (
+        _regras_opme_tuss_analise_humana_estrutural(
+            categoria=(
+                state.get(
+                    "categoria_documento"
+                )
+                or documento.get(
+                    "categoria"
+                )
+            ),
+            codigo_tuss=documento.get(
+                "codigo_tuss"
+            ),
+            resultados_rag=resultados_rag,
+        )
+    )
+
+    if regras_opme_estruturais:
+        # A própria linha normativa determina que este item
+        # não possui decisão automatizada.
+        parametros.analise_humana_incondicional = True
+
+        # Substitui eventual proveniência probabilística
+        # desse campo pela proveniência estrutural da linha
+        # TUSS realmente aplicável.
+        proveniencias = [
+            item
+            for item in (
+                parametros.proveniencias
+                or []
+            )
+            if str(
+                item.campo
+            ).strip()
+            != "analise_humana_incondicional"
+        ]
+
+        proveniencias.append(
+            ProvenienciaParametro(
+                campo=(
+                    "analise_humana_incondicional"
+                ),
+                dispositivos=(
+                    regras_opme_estruturais
+                ),
+            )
+        )
+
+        parametros.proveniencias = proveniencias
 
     valor_solicitado = state.get(
         "valor_solicitado_brl"

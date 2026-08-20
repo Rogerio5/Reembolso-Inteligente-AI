@@ -12,6 +12,11 @@ from app.agents.documento.extracao import (
 from app.agents.state import AgentState
 
 
+_PENDENCIA_DOCUMENTO_GENERICA = (
+    "Envie o documento necessário para análise."
+)
+
+
 def documento_node(
     state: AgentState,
 ) -> AgentState:
@@ -25,10 +30,17 @@ def documento_node(
         return {
             **state,
             "agente_atual": "documento",
-            "pendencias": [
-                *state.get("pendencias", []),
-                "Envie o documento necessário para análise.",
-            ],
+            "pendencias": list(
+                dict.fromkeys(
+                    [
+                        *state.get(
+                            "pendencias",
+                            [],
+                        ),
+                        _PENDENCIA_DOCUMENTO_GENERICA,
+                    ]
+                )
+            ),
             "proximo_agente": None,
             "handoff_reason": (
                 "Documento ainda não foi enviado."
@@ -76,6 +88,16 @@ def documento_node(
         None,
     )
 
+    pendencias_atuais = [
+        item
+        for item in (
+            state.get("pendencias")
+            or []
+        )
+        if item
+        != _PENDENCIA_DOCUMENTO_GENERICA
+    ]
+
     documentos_anteriores = list(
         state.get("documentos") or []
     )
@@ -90,10 +112,20 @@ def documento_node(
         or {}
     )
 
+    categoria_anterior = str(
+        documento_principal_anterior.get("categoria")
+        or ""
+    ).upper()
+
     eh_complementar = (
         documento.categoria.value
         == "RELATORIO_CLINICO"
         and bool(documento_principal_anterior)
+        and categoria_anterior
+        not in {
+            "INVALIDO",
+            "RELATORIO_CLINICO",
+        }
     )
 
     if eh_complementar:
@@ -104,6 +136,12 @@ def documento_node(
         dados_documento = (
             dados_documento_novo
         )
+
+        # O novo anexo substituiu o documento principal.
+        # Pendências derivadas do documento anterior não podem
+        # contaminar a nova análise; as normas recalcularão
+        # eventuais pendências a partir do novo documento.
+        pendencias_atuais = []
 
     categoria_principal = str(
         dados_documento.get("categoria")
@@ -127,6 +165,7 @@ def documento_node(
         "categoria_documento": categoria_principal,
         "dados_documento": dados_documento,
         "documentos": documentos,
+        "pendencias": pendencias_atuais,
         "valor_solicitado_brl": valor_principal,
         "consulta_normativa": consulta_normativa,
         "proximo_agente": (

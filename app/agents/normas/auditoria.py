@@ -767,6 +767,67 @@ def _regras_referenciadas_por_operacoes(
                 )
 
         # --------------------------------------------------
+        # Apuração pelo menor entre valor pago e teto.
+        #
+        # O dispositivo é descoberto nos próprios trechos
+        # normativos recuperados, sem número hardcoded.
+        # --------------------------------------------------
+
+        if (
+            "apurar_menor_valor"
+            in operacoes
+        ):
+            for dispositivo, secao in secoes:
+
+                secao_normalizada = (
+                    _normalizar_semantica(
+                        secao
+                    )
+                )
+
+                menciona_valor_pago = (
+                    "valor pago"
+                    in secao_normalizada
+                    or "valor efetivamente pago"
+                    in secao_normalizada
+                )
+
+                menciona_teto = (
+                    "teto"
+                    in secao_normalizada
+                )
+
+                caracteriza_apuracao = (
+                    "menor"
+                    in secao_normalizada
+                    or "apuracao"
+                    in secao_normalizada
+                    or "base de calculo"
+                    in secao_normalizada
+                )
+
+                if (
+                    menciona_valor_pago
+                    and menciona_teto
+                    and caracteriza_apuracao
+                ):
+                    adicionar(
+                        dispositivo
+                    )
+
+            # Referência cruzada explícita, por exemplo:
+            # "apuração do art. N".
+            for numero in re.findall(
+                r"apuracao.{0,180}?"
+                r"art\.\s*(\d+)",
+                texto_normalizado,
+                flags=re.DOTALL,
+            ):
+                adicionar(
+                    f"ART-{numero}"
+                )
+
+        # --------------------------------------------------
         # Arredondamento realmente executado pelo motor.
         # --------------------------------------------------
 

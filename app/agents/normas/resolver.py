@@ -819,6 +819,103 @@ def _regras_limite_anual_estrutural(
     )
 
 
+def _regras_opme_analise_estrutural(
+    resultados: list[dict[str, Any]],
+    *,
+    categoria: str | None = None,
+) -> tuple[list[str], list[str]]:
+    """
+    Preserva dispositivo normativo de itens Material / OPME
+    explicitamente marcados como sob análise e sem teto
+    automatizado na tabela normativa.
+    """
+
+    categoria_normalizada = str(
+        categoria or ""
+    ).strip().upper()
+
+    if categoria_normalizada != "MATERIAL_OPME":
+        return ([], [])
+
+    trechos: list[str] = []
+    dispositivos: list[str] = []
+
+    for indice_resultado, item in enumerate(
+        resultados,
+        start=1,
+    ):
+        arquivo = str(
+            item.get("arquivo")
+            or ""
+        ).casefold()
+
+        if "tabela_urs" not in arquivo:
+            continue
+
+        texto = str(
+            item.get("texto")
+            or ""
+        )
+
+        texto_normalizado = (
+            _normalizar_texto_estrutural(
+                texto
+            )
+        )
+
+        for artigo in re.finditer(
+            r"\bart\.?\s*(\d+)\b",
+            texto_normalizado,
+            flags=re.IGNORECASE,
+        ):
+            inicio_contexto = max(
+                0,
+                artigo.start() - 240,
+            )
+
+            contexto = texto_normalizado[
+                inicio_contexto:
+                artigo.end()
+            ]
+
+            if "opme" not in contexto:
+                continue
+
+            if (
+                "sem teto automatizado"
+                not in contexto
+                and "sob analise"
+                not in contexto
+            ):
+                continue
+
+            trecho_id = (
+                f"T{indice_resultado:03d}"
+            )
+
+            dispositivo = (
+                f"ART-{artigo.group(1)}"
+            )
+
+            if trecho_id not in trechos:
+                trechos.append(
+                    trecho_id
+                )
+
+            if (
+                dispositivo
+                not in dispositivos
+            ):
+                dispositivos.append(
+                    dispositivo
+                )
+
+    return (
+        trechos,
+        dispositivos,
+    )
+
+
 def _circulares_substituidas_pela_vigente(
     resultados: list[dict[str, Any]],
     trechos_circular: list[str],
@@ -1099,6 +1196,14 @@ Explique brevemente a precedência/vigência utilizada.
         resultados_rag
     )
 
+    (
+        trechos_opme_analise,
+        dispositivos_opme_analise,
+    ) = _regras_opme_analise_estrutural(
+        resultados_rag,
+        categoria=categoria,
+    )
+
     trechos_definicao_acompanhamento = (
         _trechos_definicao_acompanhamento_estrutural(
             resultados_rag
@@ -1111,6 +1216,7 @@ Explique brevemente a precedência/vigência utilizada.
                 *resultado.trechos_aplicaveis,
                 *trechos_limite_sessoes,
                 *trechos_limite_anual,
+                *trechos_opme_analise,
                 *trechos_definicao_acompanhamento,
             ]
         )
@@ -1146,6 +1252,7 @@ Explique brevemente a precedência/vigência utilizada.
                 *dispositivos_circular_vigente,
                 *dispositivos_limite_sessoes,
                 *dispositivos_limite_anual,
+                *dispositivos_opme_analise,
             ]
         )
     )

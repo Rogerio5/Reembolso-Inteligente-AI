@@ -51,8 +51,11 @@ def construir_consultas_normativas(
             f"\nContexto: {contexto}"
         ),
         (
-            "Quais são as regras de arredondamento, análise humana, "
-            "escalonamento e abertura de protocolo aplicáveis?"
+            "Quais são as regras específicas da categoria sobre teto ou "
+            "ausência de teto automatizado, itens sob análise, análise "
+            "humana, escalonamento, arredondamento e abertura de protocolo? "
+            "Priorize tabelas e dispositivos normativos que sustentem esse "
+            "tratamento."
             f"\nContexto: {contexto}"
         ),
         (

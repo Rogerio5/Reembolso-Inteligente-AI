@@ -183,7 +183,11 @@ async def normas_node(
         else ""
     )
 
-    if codigo_tuss_normalizado:
+    if (
+        codigo_tuss_normalizado
+        and resultado.get("decisao")
+        != "ESCALADO_ANALISTA"
+    ):
         regras_obrigatorias.append(
             f"TUSS-{codigo_tuss_normalizado}"
         )
@@ -254,6 +258,22 @@ async def normas_node(
         )
         or []
     )
+
+    # Em decisões escaladas não há auditoria final automática.
+    # Preserve, portanto, as regras obtidas da proveniência dos
+    # parâmetros realmente usados para provocar o escalonamento.
+    if (
+        resultado.get("decisao")
+        == "ESCALADO_ANALISTA"
+    ):
+        regras_runtime = list(
+            dict.fromkeys(
+                [
+                    *regras_runtime,
+                    *regras_obrigatorias,
+                ]
+            )
+        )
 
     regras_obrigatorias_validadas = [
         regra

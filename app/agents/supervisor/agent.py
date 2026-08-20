@@ -28,6 +28,15 @@ def selecionar_proximo_agente(
             or "Handoff explícito solicitado pelo subagente.",
         )
 
+    # Um novo anexo sempre deve ser processado,
+    # mesmo quando já existe documento principal
+    # ou uma decisão anterior de pendência.
+    if state.get("anexo_base64"):
+        return (
+            "documento",
+            "Há um documento novo para análise antes das demais etapas.",
+        )
+
     if state.get("concluido"):
         return (
             None,
@@ -38,15 +47,6 @@ def selecionar_proximo_agente(
         state.get("beneficiario")
         or {}
     )
-
-    if (
-        state.get("anexo_base64")
-        and not state.get("dados_documento")
-    ):
-        return (
-            "documento",
-            "Há um documento novo para análise antes das demais etapas.",
-        )
 
     if not beneficiario:
         return (

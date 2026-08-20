@@ -158,6 +158,52 @@ def _parece_identificador_carteirinha(
 
 
 
+def _mensagem_pede_explicacao_valor(
+    mensagem: str,
+) -> bool:
+    """Detecta dúvida sobre por que o reembolso ficou nesse valor."""
+    texto = str(
+        mensagem
+        or ""
+    ).casefold()
+
+    pergunta_motivo = any(
+        termo in texto
+        for termo in (
+            "por que",
+            "porque",
+            "motivo",
+            "razão",
+            "razao",
+            "inteiro",
+        )
+    )
+
+    percepcao_valor_baixo = (
+        (
+            ("só" in texto or "so" in texto)
+            and "isso" in texto
+        )
+        or (
+            "mais" in texto
+            and any(
+                termo in texto
+                for termo in (
+                    "volta",
+                    "receb",
+                    "reembols",
+                    "pag",
+                )
+            )
+        )
+    )
+
+    return (
+        pergunta_motivo
+        or percepcao_valor_baixo
+    )
+
+
 def _mensagem_sobre_historico_anual_reembolso(
     mensagem: str,
 ) -> bool:
@@ -252,6 +298,8 @@ def _mensagem_sobre_documento_pendente(
 
 def _mensagem_sobre_quantidade_sessoes(
     mensagem: str,
+    *,
+    contexto_terapia: bool = False,
 ) -> bool:
     """Detecta dúvida do beneficiário sobre quantidade de sessões."""
     texto = str(
@@ -272,7 +320,8 @@ def _mensagem_sobre_quantidade_sessoes(
     menciona_quantidade = any(
         termo in texto
         for termo in (
-            "quant",
+            "quantas",
+            "quantos",
             "número",
             "numero",
             "cont",
@@ -282,11 +331,116 @@ def _mensagem_sobre_quantidade_sessoes(
     )
 
     return (
-        menciona_sessao
-        and menciona_quantidade
+        menciona_quantidade
+        and (
+            menciona_sessao
+            or contexto_terapia
+        )
     )
 
 
+
+
+def _mensagem_sobre_perda_prazo_pedido_inicial(
+    mensagem: str,
+) -> bool:
+    """Detecta dúvida sobre perda do prazo da solicitação inicial."""
+    texto = str(
+        mensagem
+        or ""
+    ).casefold()
+
+    menciona_prazo = (
+        "prazo"
+        in texto
+    )
+
+    menciona_pedido_inicial = any(
+        termo in texto
+        for termo in (
+            "prazo de pedir",
+            "prazo para pedir",
+            "prazo de solicitar",
+            "prazo para solicitar",
+            "pedir o reembolso",
+            "solicitar o reembolso",
+            "protocolar o pedido",
+        )
+    )
+
+    menciona_perda = any(
+        termo in texto
+        for termo in (
+            "perder",
+            "perdi",
+            "perdeu",
+            "passou o prazo",
+            "fora do prazo",
+            "venceu",
+            "vencer",
+            "estourou o prazo",
+        )
+    )
+
+    menciona_recurso = any(
+        termo in texto
+        for termo in (
+            "recorr",
+            "reanal",
+            "recurso",
+            "contest",
+            "alguma coisa",
+            "ainda dá",
+            "ainda da",
+        )
+    )
+
+    return (
+        menciona_prazo
+        and menciona_pedido_inicial
+        and (
+            menciona_perda
+            or menciona_recurso
+        )
+    )
+
+
+def _extrair_prazo_reanalise_do_contexto(
+    contexto_normativo: str,
+) -> int | None:
+    """Extrai prazo apenas quando ligado textualmente à reanálise/recurso."""
+    texto = re.sub(
+        r"\s+",
+        " ",
+        str(
+            contexto_normativo
+            or ""
+        ),
+    ).casefold()
+
+    padroes = (
+        r"(?:rean[aá]lise|recurso)[^.]{0,220}?(\d{1,4})\s+dias",
+        r"(\d{1,4})\s+dias[^.]{0,220}?(?:rean[aá]lise|recurso)",
+    )
+
+    for padrao in padroes:
+        match = re.search(
+            padrao,
+            texto,
+        )
+
+        if match:
+            try:
+                return int(
+                    match.group(1)
+                )
+            except (
+                TypeError,
+                ValueError,
+            ):
+                pass
+
+    return None
 
 
 def _mensagem_sobre_prazo_reanalise(
@@ -310,6 +464,74 @@ def _mensagem_sobre_prazo_reanalise(
     )
 
 
+
+
+def _mensagem_sobre_divergencia_data_atendimento(
+    mensagem: str,
+) -> bool:
+    """Detecta dúvida ou correção sobre a data do atendimento."""
+
+    texto = str(
+        mensagem
+        or ""
+    ).casefold()
+
+    menciona_data = bool(
+        re.search(
+            r"\b(?:data|dia|quando)\b",
+            texto,
+        )
+    )
+
+    indica_duvida_ou_correcao = any(
+        termo in texto
+        for termo in (
+            "errad",
+            "incorret",
+            "acho",
+            "antes",
+            "depois",
+            "confundi",
+            "não foi",
+            "nao foi",
+            "não lembro",
+            "nao lembro",
+            "papel",
+            "documento",
+            "comprovante",
+            "corrig",
+        )
+    )
+
+    return (
+        menciona_data
+        and indica_duvida_ou_correcao
+    )
+
+
+def _formatar_data_atendimento(
+    valor: object,
+) -> str | None:
+    """Formata a data extraída do documento sem inventar valor."""
+
+    if valor is None:
+        return None
+
+    texto = str(valor).strip()
+
+    if not texto:
+        return None
+
+    match = re.fullmatch(
+        r"(\d{4})-(\d{2})-(\d{2})(?:[T ].*)?",
+        texto,
+    )
+
+    if match:
+        ano, mes, dia = match.groups()
+        return f"{dia}/{mes}/{ano}"
+
+    return texto
 
 
 async def _buscar_contexto(
@@ -445,6 +667,85 @@ def _fallback(
         or state.get("categoria_documento")
         or state.get("documentos")
     )
+
+    # Resposta determinística para pedidos já escalados.
+    # Não calcula nem antecipa valor: apenas comunica o
+    # estado efetivamente registrado pela análise.
+    if (
+        state.get("decisao")
+        == "ESCALADO_ANALISTA"
+    ):
+        texto_atual = str(
+            mensagem
+            or ""
+        ).casefold()
+
+        protocolo_atual = state.get(
+            "protocolo"
+        )
+
+        complemento_protocolo = (
+            f" O protocolo do pedido é {protocolo_atual}."
+            if protocolo_atual
+            else ""
+        )
+
+        pergunta_valor = any(
+            termo in texto_atual
+            for termo in (
+                "quanto",
+                "valor",
+                "volta",
+                "receber",
+                "reembolso",
+            )
+        )
+
+        pergunta_motivo = any(
+            termo in texto_atual
+            for termo in (
+                "por que",
+                "porque",
+                "sistema",
+                "calcula",
+                "consegue",
+            )
+        )
+
+        if pergunta_motivo:
+            return (
+                "O sistema não define o valor automaticamente neste momento "
+                "porque este pedido exige análise humana antes da decisão final. "
+                "O valor do reembolso ainda não está definido; informar um número "
+                "antes da conclusão dessa análise seria incorreto."
+                + complemento_protocolo
+            )
+
+        if pergunta_valor:
+            return (
+                "O valor do reembolso ainda não está definido. "
+                "Este pedido foi encaminhado para análise humana e, por isso, "
+                "não há um valor legítimo para informar antes da conclusão "
+                "do analista."
+                + complemento_protocolo
+            )
+
+        categoria_atual = str(
+            state.get("categoria_documento")
+            or ""
+        ).upper()
+
+        if (
+            documento_processado
+            and categoria_atual != "INVALIDO"
+        ):
+            return (
+                "O documento recebido foi aceito para continuidade do pedido "
+                "e o caso foi encaminhado para análise humana. "
+                "A análise automatizada não encerra esse tipo de solicitação, "
+                "por isso o pedido permanece com o especialista até a decisão final."
+                + complemento_protocolo
+            )
 
     pendencias = (
         state.get("pendencias")
@@ -657,6 +958,68 @@ async def gerar_resposta(
         mensagem,
     )
 
+    if _mensagem_sobre_perda_prazo_pedido_inicial(
+        mensagem
+    ):
+        prazo_reanalise = (
+            _extrair_prazo_reanalise_do_contexto(
+                contexto_normativo
+            )
+        )
+
+        partes = []
+
+        if state.get("decisao") in {
+            "APROVADO",
+            "APROVADO_PARCIAL",
+        }:
+            partes.append(
+                (
+                    "O pedido atual já analisado mantém a decisão "
+                    "registrada; a sua pergunta sobre prazo é uma "
+                    "hipótese geral."
+                )
+            )
+
+        partes.append(
+            (
+                "Se o prazo original para solicitar o reembolso já "
+                "tiver sido perdido, um pedido apresentado fora desse "
+                "prazo deve ser indeferido sem exame do mérito. "
+                "Não é possível recuperar o prazo da solicitação inicial "
+                "por meio de recurso ou pedido de reanálise."
+            )
+        )
+
+        partes.append(
+            (
+                "A reanálise só se aplica depois de uma decisão de "
+                "indeferimento sobre um pedido que já tenha sido "
+                "apresentado. Ela possui prazo próprio, mas não reabre "
+                "nem substitui o prazo da solicitação inicial."
+            )
+        )
+
+        if prazo_reanalise is not None:
+            partes.append(
+                (
+                    "Segundo o contexto normativo recuperado, o prazo "
+                    f"da reanálise é de {prazo_reanalise} dias."
+                )
+            )
+        else:
+            partes.append(
+                (
+                    "O contexto normativo disponível não sustenta aqui "
+                    "um prazo numérico para a solicitação inicial, por "
+                    "isso não vou atribuir a ela o prazo da reanálise."
+                )
+            )
+
+        return " ".join(
+            partes
+        )
+
     beneficiario = (
         state.get("beneficiario")
         or {}
@@ -667,6 +1030,87 @@ async def gerar_resposta(
         or state.get("categoria_documento")
         or state.get("documentos")
     )
+
+    # Resposta determinística no fluxo principal
+    # para pedidos que exigem análise humana.
+    if (
+        state.get("decisao")
+        == "ESCALADO_ANALISTA"
+    ):
+        texto_atual = str(
+            mensagem
+            or ""
+        ).casefold()
+
+        protocolo_atual = state.get(
+            "protocolo"
+        )
+
+        complemento_protocolo = (
+            f" O protocolo do pedido é {protocolo_atual}."
+            if protocolo_atual
+            else ""
+        )
+
+        pergunta_motivo = any(
+            termo in texto_atual
+            for termo in (
+                "por que",
+                "porque",
+                "sistema",
+                "calcula",
+                "calcular",
+                "consegue",
+            )
+        )
+
+        pergunta_valor = any(
+            termo in texto_atual
+            for termo in (
+                "quanto",
+                "valor",
+                "volta",
+                "receber",
+                "reembolso",
+            )
+        )
+
+        if pergunta_motivo:
+            return (
+                "O sistema não define o valor automaticamente porque "
+                "este pedido exige análise humana antes da decisão final. "
+                "Neste momento não existe valor de reembolso calculado "
+                "ou autorizado para informar. Informar qualquer número "
+                "antes da conclusão do analista seria incorreto."
+                + complemento_protocolo
+            )
+
+        if pergunta_valor:
+            return (
+                "Neste momento, o valor do reembolso ainda não está "
+                "definido. Portanto, ainda não existe um valor calculado "
+                "ou autorizado que eu possa informar. O pedido precisa "
+                "ser concluído pelo analista humano antes da definição "
+                "desse valor."
+                + complemento_protocolo
+            )
+
+        categoria_atual = str(
+            state.get("categoria_documento")
+            or ""
+        ).upper()
+
+        if (
+            documento_processado
+            and categoria_atual != "INVALIDO"
+        ):
+            return (
+                "O documento correto foi recebido e aceito para "
+                "continuidade do pedido. A solicitação foi encaminhada "
+                "para análise humana e permanece com o especialista "
+                "até a decisão final."
+                + complemento_protocolo
+            )
 
     if (
         not beneficiario
@@ -691,6 +1135,63 @@ async def gerar_resposta(
             "sessoes_utilizadas_ano"
         )
     )
+
+    if (
+        beneficiario
+        and documento_processado
+        and str(
+            state.get("categoria_documento")
+            or ""
+        ).upper() != "INVALIDO"
+        and _mensagem_sobre_divergencia_data_atendimento(
+            mensagem
+        )
+    ):
+        documento_principal = (
+            state.get("dados_documento")
+            or {}
+        )
+
+        data_documento = _formatar_data_atendimento(
+            documento_principal.get(
+                "data_atendimento"
+            )
+        )
+
+        partes = [
+            (
+                "Para esta análise, a data do atendimento "
+                "considerada é a registrada no documento "
+                "fiscal recebido."
+            )
+        ]
+
+        if data_documento:
+            partes.append(
+                (
+                    "O documento registra a data de "
+                    f"{data_documento}."
+                )
+            )
+
+        partes.append(
+            (
+                "O documento fiscal recebido continua sendo "
+                "a referência do pedido; uma lembrança "
+                "diferente não substitui esse dado."
+            )
+        )
+
+        partes.append(
+            (
+                "Se o prestador emitir um documento fiscal "
+                "corrigido, envie-o para que a data possa "
+                "ser reavaliada."
+            )
+        )
+
+        return " ".join(partes)
+
 
     if (
         beneficiario
@@ -801,7 +1302,14 @@ async def gerar_resposta(
     if (
         beneficiario
         and _mensagem_sobre_quantidade_sessoes(
-            mensagem
+            mensagem,
+            contexto_terapia=(
+                str(
+                    state.get("categoria_documento")
+                    or ""
+                ).upper()
+                == "SESSAO_TERAPIA"
+            ),
         )
     ):
         sessoes_realizadas_operadora = (
@@ -1014,6 +1522,119 @@ async def gerar_resposta(
         return " ".join(
             partes
         )
+
+    if (
+        state.get("decisao")
+        in {
+            "APROVADO",
+            "APROVADO_PARCIAL",
+        }
+        and _mensagem_pede_explicacao_valor(
+            mensagem
+        )
+    ):
+        operacoes = set(
+            state.get("operacoes_utilizadas")
+            or []
+        )
+
+        parametros = (
+            state.get("parametros_calculo")
+            or {}
+        )
+
+        valor_aprovado = _moeda(
+            state.get("valor_reembolso_brl")
+        )
+
+        partes = []
+
+        if valor_aprovado:
+            partes.append(
+                f"O valor aprovado para este pedido é {valor_aprovado}."
+            )
+
+        if (
+            "limitar_por_saldo_anual"
+            in operacoes
+        ):
+            saldo_anual = _moeda(
+                parametros.get(
+                    "saldo_anual_brl"
+                )
+            )
+
+            limite_anual_urs = (
+                parametros.get(
+                    "limite_anual_urs"
+                )
+            )
+
+            if limite_anual_urs is not None:
+                partes.append(
+                    (
+                        "Existe um limite anual acumulado de "
+                        f"{limite_anual_urs:g} URS por beneficiário."
+                    )
+                )
+
+            partes.append(
+                (
+                    "Os reembolsos já pagos anteriormente no mesmo ano "
+                    "reduzem esse limite e, consequentemente, o saldo "
+                    "ainda disponível para novos pedidos."
+                )
+            )
+
+            if saldo_anual:
+                partes.append(
+                    (
+                        "Para este pedido, o saldo anual disponível "
+                        f"apurado foi {saldo_anual}; por isso esse saldo "
+                        "limitou o valor que poderia ser reembolsado agora."
+                    )
+                )
+
+        else:
+            fatores = []
+
+            if (
+                "determinar_teto_procedimento"
+                in operacoes
+            ):
+                fatores.append(
+                    "o teto aplicável ao procedimento"
+                )
+
+            if (
+                "aplicar_coparticipacao"
+                in operacoes
+            ):
+                fatores.append(
+                    "a coparticipação prevista para o caso"
+                )
+
+            if fatores:
+                if len(fatores) == 1:
+                    motivo = fatores[0]
+                else:
+                    motivo = (
+                        ", ".join(fatores[:-1])
+                        + " e "
+                        + fatores[-1]
+                    )
+
+                partes.append(
+                    (
+                        "O valor não corresponde necessariamente ao "
+                        f"total pago porque o cálculo considera {motivo}."
+                    )
+                )
+
+        if partes:
+            return " ".join(
+                partes
+            )
 
     if (
         state.get("decisao")

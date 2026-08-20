@@ -200,6 +200,10 @@ async def chat(
         "session_id": session_id,
         "mensagem": mensagem,
         "concluido": False,
+        "encerrar_apos_triagem": bool(
+            carteirinha_mencionada
+            and not carteirinha_sessao
+        ),
         "proximo_agente": None,
         "handoff_reason": None,
     }
@@ -225,18 +229,160 @@ async def chat(
             "anexo_base64"
         ] = req.anexo.base64
 
-    resultado = await graph_module.grafo.ainvoke(
-        entrada,
-        config=config,
+    try:
+        resultado = await graph_module.grafo.ainvoke(
+            entrada,
+            config=config,
+        )
+    except Exception as exc:
+        # Uma falha interna do grafo não deve transformar
+        # o turno inteiro em HTTP 500 / resposta vazia.
+        #
+        # Não repetimos ainvoke automaticamente, pois o grafo
+        # pode ter executado efeitos externos antes da falha.
+        print(
+            "GRAPH_EXECUTION_ERROR=",
+            repr(exc),
+        )
+
+        try:
+            recuperado = await _estado_atual(
+                session_id
+            )
+        except Exception as recovery_exc:
+            print(
+                "GRAPH_STATE_RECOVERY_ERROR=",
+                repr(recovery_exc),
+            )
+            recuperado = {}
+
+        # Conserva o último estado confiável disponível.
+        resultado = {
+            **anterior,
+            **(recuperado or {}),
+        }
+
+        # Mantém apenas informações seguras do turno atual.
+        resultado["session_id"] = session_id
+        resultado["mensagem"] = mensagem
+
+        if carteirinha_mencionada:
+            resultado[
+                "carteirinha"
+            ] = carteirinha_mencionada
+
+    print()
+    print("==========================================")
+    print("CASE02_E2E_STATE")
+    print("==========================================")
+    print("MENSAGEM=", mensagem[:160])
+    print(
+        "CATEGORIA=",
+        resultado.get("categoria_documento"),
+    )
+    print(
+        "DECISAO=",
+        resultado.get("decisao"),
+    )
+    print(
+        "VALOR_SOLICITADO=",
+        resultado.get("valor_solicitado_brl"),
+    )
+    print(
+        "VALOR_REEMBOLSO=",
+        resultado.get("valor_reembolso_brl"),
+    )
+    print(
+        "PROTOCOLO=",
+        resultado.get("protocolo"),
+    )
+    print(
+        "PENDENCIAS=",
+        resultado.get("pendencias"),
     )
 
-    resposta = await gerar_resposta(
-        resultado,
-        mensagem,
+    beneficiario_debug = (
+        resultado.get("beneficiario")
+        or {}
     )
+
+    print(
+        "PLANO=",
+        beneficiario_debug.get("plano"),
+    )
+    print(
+        "DATA_ADESAO=",
+        beneficiario_debug.get("data_adesao"),
+    )
+    print(
+        "SESSOES_MCP=",
+        beneficiario_debug.get("sessoes_terapia_ano"),
+    )
+
+    print(
+        "DOCUMENTO_PRINCIPAL=",
+        resultado.get("dados_documento"),
+    )
+
+    print(
+        "DOCUMENTOS_CATEGORIAS=",
+        [
+            item.get("categoria")
+            for item in (
+                resultado.get("documentos")
+                or []
+            )
+            if isinstance(item, dict)
+        ],
+    )
+
+    resolucao_debug = (
+        resultado.get("resolucao_normativa")
+        or {}
+    )
+
+    print(
+        "DISPOSITIVOS_CANONICOS=",
+        resolucao_debug.get(
+            "dispositivos_canonicos"
+        ),
+    )
+
+    print(
+        "PARAMETROS_CALCULO=",
+        resultado.get("parametros_calculo"),
+    )
+
+    print(
+        "PARAMETROS_UTILIZADOS=",
+        resultado.get("parametros_utilizados"),
+    )
+
+    print(
+        "OPERACOES_UTILIZADAS=",
+        resultado.get("operacoes_utilizadas"),
+    )
+
+    print(
+        "REGRAS_FINAIS=",
+        resultado.get("regras_aplicadas"),
+    )
+    print("==========================================")
+
+    try:
+        resposta = await gerar_resposta(
+            resultado,
+            mensagem,
+        )
+    except Exception as exc:
+        print(
+            "RESPONSE_GENERATION_ERROR=",
+            repr(exc),
+        )
+        resposta = ""
 
     resposta = sanitizar_resposta(
-        resposta
+        str(resposta or "")
     )
 
     if not resposta.strip():
@@ -320,6 +466,18 @@ async def chat(
 
         resposta = sanitizar_resposta(
             resposta
+        )
+
+    # Invariante final da API:
+    # todo turno que chegar ao fim do processamento
+    # deve possuir uma resposta textual não vazia.
+    if (
+        not isinstance(resposta, str)
+        or not resposta.strip()
+    ):
+        resposta = (
+            "Recebi sua mensagem e vou continuar o atendimento "
+            "com os dados já registrados nesta sessão."
         )
 
     historico_anterior = (

@@ -79,6 +79,10 @@ async def triagem_node(
         historico_bruto
     )
 
+    encerrar_apos_triagem = bool(
+        state.get("encerrar_apos_triagem")
+    )
+
     return {
         **state,
         "agente_atual": "triagem",
@@ -86,16 +90,28 @@ async def triagem_node(
         "historico_reembolsos": historico,
         "pendencias": pendencias_atuais,
         "proximo_agente": (
-            "normas"
-            if state.get("dados_documento")
-            else "documento"
-        ),
-        "handoff_reason": (
-            "Beneficiário e histórico consultados no MCP; "
-            + (
-                "documento já disponível, seguir para normas."
+            None
+            if encerrar_apos_triagem
+            else (
+                "normas"
                 if state.get("dados_documento")
-                else "documento ainda precisa ser analisado."
+                else "documento"
             )
         ),
+        "handoff_reason": (
+            (
+                "Beneficiário e histórico consultados no MCP; "
+                "turno encerrado após validação da carteirinha."
+            )
+            if encerrar_apos_triagem
+            else (
+                "Beneficiário e histórico consultados no MCP; "
+                + (
+                    "documento já disponível, seguir para normas."
+                    if state.get("dados_documento")
+                    else "documento ainda precisa ser analisado."
+                )
+            )
+        ),
+        "concluido": encerrar_apos_triagem,
     }
