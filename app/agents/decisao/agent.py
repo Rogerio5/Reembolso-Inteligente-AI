@@ -207,6 +207,170 @@ async def decisao_node(
             * parametros.quantidade_urs
         )
 
+    # ------------------------------------------------------
+    # Competência decisória deve ser verificada antes de
+    # continuar a análise automatizada.
+    #
+    # A existência de limite_alcada_brl não significa,
+    # por si só, escalonamento. O escalonamento ocorre
+    # quando o valor concreto ultrapassa esse limite.
+    # ------------------------------------------------------
+
+    parametros_escalonamento_previo: list[str] = []
+
+    if parametros.analise_humana_incondicional:
+        parametros_escalonamento_previo.append(
+            "analise_humana_incondicional"
+        )
+
+    elif (
+        parametros.limite_alcada_brl is not None
+        and valor_solicitado is not None
+        and valor_solicitado
+        > parametros.limite_alcada_brl
+    ):
+        parametros_escalonamento_previo.append(
+            "limite_alcada_brl"
+        )
+
+    if parametros_escalonamento_previo:
+
+        regras_escalonamento_runtime: list[str] = []
+
+        parametros_dump = parametros.model_dump(
+            mode="json"
+        )
+
+        for proveniencia in (
+            parametros_dump.get(
+                "proveniencias"
+            )
+            or []
+        ):
+            if not isinstance(
+                proveniencia,
+                dict,
+            ):
+                continue
+
+            campo = str(
+                proveniencia.get(
+                    "campo"
+                )
+                or ""
+            ).strip()
+
+            if (
+                campo
+                not in parametros_escalonamento_previo
+            ):
+                continue
+
+            for dispositivo in (
+                proveniencia.get(
+                    "dispositivos"
+                )
+                or []
+            ):
+                dispositivo = str(
+                    dispositivo
+                    or ""
+                ).strip()
+
+                if (
+                    dispositivo
+                    and dispositivo
+                    not in regras_escalonamento_runtime
+                ):
+                    regras_escalonamento_runtime.append(
+                        dispositivo
+                    )
+
+        numero_protocolo = state.get(
+            "protocolo"
+        )
+
+        if not numero_protocolo:
+            carteirinha = state.get(
+                "carteirinha"
+            )
+
+            if not carteirinha:
+                raise RuntimeError(
+                    "Carteirinha ausente para abertura "
+                    "do protocolo."
+                )
+
+            protocolo_mcp = await abrir_protocolo(
+                carteirinha=str(
+                    carteirinha
+                ),
+                payload={
+                    "session_id": state.get(
+                        "session_id"
+                    ),
+                    "categoria_documento": (
+                        state.get(
+                            "categoria_documento"
+                        )
+                    ),
+                    "valor_solicitado_brl": (
+                        valor_solicitado
+                    ),
+                    "regras_aplicadas": (
+                        state.get(
+                            "regras_aplicadas"
+                        )
+                        or []
+                    ),
+                    "motivo": (
+                        "Pedido fora da competência "
+                        "decisória da análise automatizada."
+                    ),
+                },
+            )
+
+            numero_protocolo = (
+                protocolo_mcp.get(
+                    "protocolo"
+                )
+            )
+
+            if not numero_protocolo:
+                raise RuntimeError(
+                    "MCP não retornou número "
+                    "de protocolo."
+                )
+
+        return {
+            **state,
+            "agente_atual": "decisao",
+            "parametros_calculo": (
+                parametros.model_dump(
+                    mode="json"
+                )
+            ),
+            "decisao": "ESCALADO_ANALISTA",
+            "valor_reembolso_brl": None,
+            "parametros_utilizados": list(
+                dict.fromkeys(
+                    parametros_escalonamento_previo
+                )
+            ),
+            "regras_obrigatorias_runtime": list(
+                dict.fromkeys(
+                    regras_escalonamento_runtime
+                )
+            ),
+            "protocolo": str(
+                numero_protocolo
+            ),
+            "pendencias": [],
+            "pendencias_documentais_mensagens": [],
+            "proximo_agente": None,
+            "concluido": True,
+        }
+
     documentos = (
         state.get("documentos")
         or []
