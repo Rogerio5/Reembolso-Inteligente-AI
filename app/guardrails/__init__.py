@@ -164,37 +164,37 @@ def sanitizar_resposta(
 def resposta_fora_escopo(
     mensagem: str,
 ) -> str:
-    """Resposta segura e variada para pedido de terceiro."""
+    """Resposta explícita e segura para pedido sobre terceiro."""
 
     opcoes = (
         (
-            "Recuso o pedido de consultar ou usar dados da sua esposa "
-            "nesta sessão. Não posso consultar, confirmar, utilizar ou "
-            "fornecer informações de outro beneficiário. Esse pedido "
-            "sobre terceiro está fora do escopo. O seu pedido original "
+            "Não posso consultar, validar, confirmar, usar ou fornecer "
+            "informações sobre outro beneficiário nesta sessão, incluindo "
+            "plano, carteirinha, dados ou reembolso. Não vou validar nem "
+            "usar a carteirinha informada para essa outra pessoa. Esse "
+            "pedido de terceiro está fora do escopo. O seu pedido original "
             "continua normalmente."
         ),
         (
-            "Não posso atender ao pedido sobre outro beneficiário. "
-            "Não vou usar nem consultar a carteirinha ou os dados dessa "
-            "outra pessoa nesta sessão. A solicitação de terceiro fica "
-            "fora do escopo, mas continuamos normalmente com o seu "
-            "pedido original."
+            "Esse pedido envolve outro beneficiário e está fora do escopo "
+            "desta sessão. Não posso consultar, validar, confirmar nem "
+            "fornecer informações sobre o plano, a carteirinha, os dados "
+            "ou o reembolso dessa pessoa. A carteirinha informada para o "
+            "terceiro não será utilizada. Continuamos normalmente apenas "
+            "com o seu pedido original."
         ),
         (
-            "Esse pedido sobre outra pessoa está fora do escopo desta "
-            "sessão. Não posso consultar, usar, confirmar nem fornecer "
-            "dados de outro beneficiário, inclusive cônjuge ou "
-            "dependente. Vou manter apenas o seu pedido original em "
-            "andamento."
+            "Não vou consultar nem validar dados de outra pessoa nesta "
+            "sessão. Isso inclui plano, carteirinha, informações cadastrais "
+            "e dados de reembolso de cônjuge, dependente ou qualquer outro "
+            "beneficiário. O pedido sobre terceiro fica fora do escopo, "
+            "enquanto o seu pedido original permanece em andamento."
         ),
     )
 
     indice = int(
         hashlib.sha256(
-            mensagem.encode(
-                "utf-8"
-            )
+            mensagem.encode("utf-8")
         ).hexdigest()[:8],
         16,
     ) % len(opcoes)
