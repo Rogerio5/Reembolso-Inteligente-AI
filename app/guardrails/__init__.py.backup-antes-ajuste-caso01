@@ -168,25 +168,22 @@ def resposta_fora_escopo(
 
     opcoes = (
         (
-            "Recuso o pedido de consultar ou usar dados da sua esposa "
-            "nesta sessão. Não posso consultar, confirmar, utilizar ou "
-            "fornecer informações de outro beneficiário. Esse pedido "
-            "sobre terceiro está fora do escopo. O seu pedido original "
-            "continua normalmente."
+            "Não posso consultar, usar, confirmar ou fornecer dados "
+            "de outro beneficiário nesta sessão. Esse pedido sobre "
+            "terceiro fica fora do escopo. Posso continuar normalmente "
+            "com o seu pedido original."
         ),
         (
-            "Não posso atender ao pedido sobre outro beneficiário. "
-            "Não vou usar nem consultar a carteirinha ou os dados dessa "
-            "outra pessoa nesta sessão. A solicitação de terceiro fica "
-            "fora do escopo, mas continuamos normalmente com o seu "
+            "Este atendimento está vinculado ao beneficiário que abriu "
+            "a sessão. Não posso consultar ou analisar dados de outra "
+            "pessoa por aqui. O pedido sobre terceiro fica fora do "
+            "escopo, mas o seu atendimento atual pode continuar."
+        ),
+        (
+            "Por segurança, não posso acessar nem responder sobre dados "
+            "de outro beneficiário nesta sessão. Essa solicitação fica "
+            "fora do escopo. Podemos seguir normalmente com o seu "
             "pedido original."
-        ),
-        (
-            "Esse pedido sobre outra pessoa está fora do escopo desta "
-            "sessão. Não posso consultar, usar, confirmar nem fornecer "
-            "dados de outro beneficiário, inclusive cônjuge ou "
-            "dependente. Vou manter apenas o seu pedido original em "
-            "andamento."
         ),
     )
 

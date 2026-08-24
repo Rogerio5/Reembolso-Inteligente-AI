@@ -535,59 +535,6 @@ def _formatar_data_atendimento(
 
 
 
-def _mensagem_sobre_correcao_valor_informado(
-    mensagem: str,
-) -> bool:
-    """Detecta tentativa de corrigir valor apenas pela fala do beneficiário."""
-
-    texto = str(
-        mensagem
-        or ""
-    ).casefold()
-
-    menciona_valor = (
-        "r$" in texto
-        or bool(
-            re.search(
-                r"\b\d{1,3}(?:\.\d{3})*(?:,\d{2})\b",
-                texto,
-            )
-        )
-    )
-
-    indica_correcao = any(
-        termo in texto
-        for termo in (
-            "na verdade",
-            "valor correto",
-            "valor certo",
-            "corrigindo",
-            "correção",
-            "correcao",
-            "eu falei",
-            "falei errado",
-        )
-    )
-
-    contexto_financeiro = any(
-        termo in texto
-        for termo in (
-            "valor",
-            "paguei",
-            "pago",
-            "reembolso",
-            "despesa",
-            "r$",
-        )
-    )
-
-    return (
-        menciona_valor
-        and indica_correcao
-        and contexto_financeiro
-    )
-
-
 def _pode_responder_sem_carteirinha(
     mensagem: str,
 ) -> bool:
@@ -853,51 +800,6 @@ def _fallback(
 
     texto = mensagem.casefold()
 
-    if _mensagem_sobre_correcao_valor_informado(
-        mensagem
-    ):
-        valor_documento = state.get(
-            "valor_solicitado_brl"
-        )
-
-        if (
-            documento_processado
-            and valor_documento is not None
-        ):
-            valor_formatado = (
-                f"{float(valor_documento):,.2f}"
-                .replace(",", "X")
-                .replace(".", ",")
-                .replace("X", ".")
-            )
-
-            return (
-                "Entendi a correção que você informou, mas o valor "
-                "considerado na análise não pode ser alterado apenas "
-                "pela sua mensagem. O valor pago válido é o registrado "
-                f"no documento fiscal: R$ {valor_formatado}. "
-                "Esse valor também não deve ser confundido com o valor "
-                "de reembolso, que depende das regras aplicáveis."
-            )
-
-        if not beneficiario:
-            return (
-                "Entendi a correção que você informou, mas não posso "
-                "considerar esse valor como valor pago nem como valor "
-                "de reembolso apenas com base na sua mensagem. Para a "
-                "análise, o valor pago válido é o que constar no "
-                "documento fiscal. Para consultar a operadora e "
-                "prosseguir, informe a sua carteirinha."
-            )
-
-        return (
-            "Entendi a correção que você informou, mas não posso "
-            "considerar esse valor como valor pago nem como valor "
-            "de reembolso apenas com base na sua mensagem. O valor "
-            "válido para a análise deverá ser obtido do documento "
-            "fiscal."
-        )
-
     if (
         not beneficiario
         and not _pode_responder_sem_carteirinha(
@@ -1078,63 +980,6 @@ async def gerar_resposta(
     ):
         return resposta_dado_clinico(
             mensagem
-        )
-
-    if _mensagem_sobre_correcao_valor_informado(
-        mensagem
-    ):
-        beneficiario_atual = (
-            state.get("beneficiario")
-            or {}
-        )
-
-        documento_processado_atual = bool(
-            state.get("dados_documento")
-            or state.get("categoria_documento")
-            or state.get("documentos")
-        )
-
-        valor_documento = state.get(
-            "valor_solicitado_brl"
-        )
-
-        if (
-            documento_processado_atual
-            and valor_documento is not None
-        ):
-            valor_formatado = (
-                f"{float(valor_documento):,.2f}"
-                .replace(",", "X")
-                .replace(".", ",")
-                .replace("X", ".")
-            )
-
-            return (
-                "Entendi a correção informada, mas o valor pago "
-                "não pode ser alterado apenas pela sua mensagem. "
-                "Para esta análise, prevalece o valor registrado "
-                f"no documento fiscal: R$ {valor_formatado}. "
-                "Esse valor pago não deve ser confundido com o "
-                "valor de reembolso, que depende das regras "
-                "aplicáveis ao pedido."
-            )
-
-        if not beneficiario_atual:
-            return (
-                "Entendi a correção informada, mas não posso "
-                "considerar o valor mencionado na mensagem como "
-                "valor pago nem como valor de reembolso. O valor "
-                "pago válido para a análise deve vir do documento "
-                "fiscal. Para consultar a operadora e prosseguir "
-                "com o pedido, informe a sua carteirinha."
-            )
-
-        return (
-            "Entendi a correção informada, mas não posso "
-            "considerar o valor mencionado na mensagem como "
-            "valor pago nem como valor de reembolso. Para a "
-            "análise, o valor pago válido deve ser obtido do "
-            "documento fiscal."
         )
 
     historico = (
