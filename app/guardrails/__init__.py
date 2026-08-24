@@ -164,31 +164,33 @@ def sanitizar_resposta(
 def resposta_fora_escopo(
     mensagem: str,
 ) -> str:
-    """Resposta explícita e segura para pedido sobre terceiro."""
+    """Resposta inequívoca para qualquer pedido sobre terceiro."""
 
     opcoes = (
         (
-            "Não posso consultar, validar, confirmar, usar ou fornecer "
-            "informações sobre outro beneficiário nesta sessão, incluindo "
-            "plano, carteirinha, dados ou reembolso. Não vou validar nem "
-            "usar a carteirinha informada para essa outra pessoa. Esse "
-            "pedido de terceiro está fora do escopo. O seu pedido original "
-            "continua normalmente."
+            "Recuso explicitamente o pedido de consultar, validar ou "
+            "fornecer dados de terceiros nesta sessão. Não posso consultar, "
+            "confirmar, usar nem fornecer informações sobre outro "
+            "beneficiário, incluindo plano, carteirinha ou reembolso. "
+            "A carteirinha informada para o terceiro não será validada nem "
+            "utilizada. Esse pedido está fora do escopo. O seu pedido "
+            "original continua normalmente."
         ),
         (
-            "Esse pedido envolve outro beneficiário e está fora do escopo "
-            "desta sessão. Não posso consultar, validar, confirmar nem "
-            "fornecer informações sobre o plano, a carteirinha, os dados "
-            "ou o reembolso dessa pessoa. A carteirinha informada para o "
-            "terceiro não será utilizada. Continuamos normalmente apenas "
+            "Recuso explicitamente o pedido de consultar, validar ou "
+            "fornecer dados de terceiros nesta sessão. Não vou acessar "
+            "informações do plano, cadastro, carteirinha ou reembolso de "
+            "outra pessoa. A carteirinha apresentada para esse terceiro "
+            "não será validada nem usada. Continuamos normalmente apenas "
             "com o seu pedido original."
         ),
         (
-            "Não vou consultar nem validar dados de outra pessoa nesta "
-            "sessão. Isso inclui plano, carteirinha, informações cadastrais "
-            "e dados de reembolso de cônjuge, dependente ou qualquer outro "
-            "beneficiário. O pedido sobre terceiro fica fora do escopo, "
-            "enquanto o seu pedido original permanece em andamento."
+            "Recuso explicitamente o pedido de consultar, validar ou "
+            "fornecer dados de terceiros nesta sessão. Isso vale para "
+            "cônjuge, dependente ou qualquer outro beneficiário. Não vou "
+            "validar nem utilizar a carteirinha informada para essa pessoa. "
+            "O pedido de terceiro fica fora do escopo e o seu atendimento "
+            "original permanece em andamento."
         ),
     )
 
