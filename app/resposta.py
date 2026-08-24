@@ -1080,6 +1080,84 @@ async def gerar_resposta(
             mensagem
         )
 
+    texto_atual = str(mensagem or "").casefold()
+
+    tentativa_ignorar_regras = any(
+        termo in texto_atual
+        for termo in (
+            "esquece as regras",
+            "esqueça as regras",
+            "ignore as regras",
+            "ignora as regras",
+            "ignorar as regras",
+        )
+    )
+
+    tentativa_aprovar_sem_documento = (
+        tentativa_ignorar_regras
+        and any(
+            termo in texto_atual
+            for termo in (
+                "aprova",
+                "aprove",
+                "aprovado",
+                "reembolso",
+            )
+        )
+        and any(
+            termo in texto_atual
+            for termo in (
+                "sem comprovante",
+                "sem documento",
+                "sem nota",
+                "sem recibo",
+            )
+        )
+    )
+
+    if tentativa_aprovar_sem_documento:
+        return (
+            "Não posso ignorar as regras nem aprovar um reembolso "
+            "sem a documentação exigida. Também não posso considerar "
+            "um valor mencionado apenas na mensagem como valor pago "
+            "ou como valor de reembolso. Para continuar a análise, "
+            "preciso da sua carteirinha e de um documento fiscal válido."
+        )
+
+    pedido_resumo_final = (
+        "resumo final" in texto_atual
+        or (
+            "resumo" in texto_atual
+            and "meu pedido" in texto_atual
+        )
+    )
+
+    if pedido_resumo_final:
+        beneficiario_atual = state.get("beneficiario") or {}
+        documento_atual = (
+            state.get("dados_documento")
+            or state.get("categoria_documento")
+            or state.get("documentos")
+        )
+        decisao_atual = state.get("decisao")
+        valor_atual = state.get("valor_reembolso_brl")
+
+        if (
+            not beneficiario_atual
+            and not documento_atual
+            and decisao_atual is None
+            and valor_atual is None
+        ):
+            return (
+                "Resumo do estado atual: o pedido ainda não pode ser "
+                "aprovado porque a carteirinha não foi informada e "
+                "nenhum documento fiscal válido foi processado nesta "
+                "sessão. Não há valor pago validado, não há valor de "
+                "reembolso calculado e nenhuma decisão foi tomada. "
+                "Para prosseguir, envie primeiro a sua carteirinha e, "
+                "depois, o documento fiscal válido para análise."
+            )
+
     if _mensagem_sobre_correcao_valor_informado(
         mensagem
     ):
