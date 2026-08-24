@@ -2097,8 +2097,12 @@ async def gerar_resposta(
         "beneficiário como fonte.\n"
 
         "5. Se uma documentação antes pendente tiver sido recebida e "
-        "pendencias=[] agora, não peça novamente esse documento. "
-        "Considere o estado atual da sessão.\n"
+        "pendencias=[] agora, responda primeiro ao fato informado pelo "
+        "beneficiário: confirme explicitamente que o relatório ou documento "
+        "complementar enviado neste turno foi recebido e será considerado "
+        "na análise. Só depois informe o novo status, decisão ou valor do "
+        "pedido, quando esses dados estiverem disponíveis. Não peça novamente "
+        "o documento que já foi recebido. Considere o estado atual da sessão.\n"
 
         "6. Em perguntas sobre perda de prazo, recurso, contestação ou "
         "reanálise, responda às duas partes quando o CONTEXTO NORMATIVO "
@@ -2131,7 +2135,17 @@ async def gerar_resposta(
         "NORMATIVO informar pedido de reanálise, explique essa "
         "possibilidade e o prazo previsto na norma. Deixe claro que a "
         "reanálise de uma decisão não reabre um prazo original de "
-        "solicitação que já tenha sido perdido."
+        "solicitação que já tenha sido perdido.\n"
+
+        "11. Se categoria_documento=INVALIDO, confirme explicitamente "
+        "que o arquivo enviado foi recebido. Depois informe claramente "
+        "que ele foi classificado como inválido e explique o problema "
+        "com base apenas nos dados disponíveis no estado ou no documento. "
+        "Quando a natureza do arquivo estiver identificada, explique por "
+        "que ela não corresponde a um documento válido para análise de "
+        "reembolso. Não trate documento inválido como PENDENTE_DOCUMENTO "
+        "nem como DESPESA_NAO_COBERTA e não responda apenas dizendo que "
+        "o arquivo é inválido sem explicar o motivo."
     )
 
     try:
