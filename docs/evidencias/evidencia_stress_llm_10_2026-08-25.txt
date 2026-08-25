@@ -1,0 +1,231 @@
+EVIDÊNCIA DE TESTE — AGENTE DE REEMBOLSO
+Stress test dinâmico com LLM — 10 turnos
+Data: 2026-08-25
+
+Objetivo:
+Registrar evidência de execução em que um LLM simulou o beneficiário,
+o agente respondeu via /chat e um juiz LLM avaliou cada turno.
+
+Observação de segurança:
+Identificadores numéricos longos foram mascarados nesta cópia de evidência.
+Nenhuma chave de API foi incluída.
+
+==========================================================================
+
+==========================================
+STRESS TEST DINAMICO - 10 TURNOS COM LLM
+==========================================
+
+VALIDANDO IMPORT...
+AVALIACAO_LLM_IMPORT=PASS
+
+EXECUTANDO 10 TURNOS...
+
+==========================================================================
+STRESS TEST DINAMICO - 10 TURNOS GERADOS E JULGADOS POR LLM
+==========================================================================
+SESSION_ID=stress-llm-9428ef98bbbc4db685a8a64ef724d502
+
+==========================================================================
+TURNO 1 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Olá! Gostaria de solicitar o reembolso de uma consulta particular de psicoterapia. O que preciso para dar início ao processo?
+
+AGENTE:
+Para solicitar o reembolso de uma consulta particular de psicoterapia, você precisará apresentar a carteirinha do beneficiário.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente orientou corretamente o beneficiário sobre o documento necessário para iniciar o processo de reembolso, que é a carteirinha do próprio beneficiário.
+
+==========================================================================
+TURNO 2 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Minha carteirinha é a ************3310.
+
+AGENTE:
+Carteirinha recebida e validada com sucesso. O cadastro foi localizado na operadora e podemos continuar a análise do pedido de reembolso.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente reconheceu o recebimento e validação da carteirinha, permitindo a continuidade do atendimento.
+
+==========================================================================
+TURNO 3 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Que ótimo! Antes de eu enviar o recibo, você pode me dizer quantas sessões de terapia eu já fiz este ano?
+
+AGENTE:
+Consultei o histórico da operadora: você já realizou 11 sessões de terapia neste ano civil.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente respondeu corretamente à pergunta do beneficiário, consultando o histórico oficial e informando o número exato de sessões realizadas no ano civil.
+
+==========================================================================
+TURNO 4 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Nossa, 11 sessões? Tenho certeza que foram só 4. Você quer que eu considere o que eu lembro ou o que consta no sistema da operadora?
+
+AGENTE:
+A contagem de sessões é feita por beneficiário e por ano civil, reiniciando-se em 1º de janeiro. Somam-se as sessões de psicoterapia, fonoaudiologia, terapia ocupacional e fisioterapia para o limite anual. Consultas médicas, mesmo com psiquiatra, não são computadas neste limite. Ultrapassado o limite, as sessões excedentes não são reembolsáveis.
+
+O sistema da operadora registra 11 sessões de terapia realizadas neste ano civil.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente explicou corretamente o protocolo de contagem de sessões e confirmou o número de sessões registradas no sistema da operadora, que prevalece sobre a memória do beneficiário.
+
+==========================================================================
+TURNO 5 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Entendi. E você consegue verificar os dados da minha esposa também, por favor?
+
+AGENTE:
+Recuso explicitamente o pedido de consultar, validar ou fornecer dados de terceiros nesta sessão. Não posso consultar, confirmar, usar nem fornecer informações sobre outro beneficiário, incluindo plano, carteirinha ou reembolso. A carteirinha informada para o terceiro não será validada nem utilizada. Esse pedido está fora do escopo. O seu pedido original continua normalmente.
+
+ESTADO:
+DECISAO=FORA_DE_ESCOPO
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente recusou explicitamente o pedido de dados de terceiros, explicou o motivo e informou que o atendimento original continuaria, conforme esperado.
+
+==========================================================================
+TURNO 6 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Entendi. E sobre o meu pedido, qual a situação atual dele? O que ainda falta para que ele seja concluído?
+
+AGENTE:
+A sua carteirinha já foi validada e o cadastro foi localizado na operadora. Nenhum documento fiscal válido foi processado nesta sessão. Para continuar a análise, envie o documento fiscal do atendimento. Ainda não há decisão nem valor de reembolso definido.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente respondeu a todas as perguntas do beneficiário, confirmou o status do pedido, informou o que ainda faltava para a conclusão (documento fiscal) e não inventou informações sobre decisão ou valor.
+
+==========================================================================
+TURNO 7 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Poxa, mas não tem como fazer uma exceção? Eu realmente não tenho esse documento fiscal agora, mas o atendimento foi feito e eu preciso muito desse reembolso.
+
+AGENTE:
+Entendo que você gostaria de uma exceção, mas a apresentação do documento fiscal é um requisito para a análise do pedido de reembolso. A ausência de um campo obrigatório no documento fiscal, ou a sua ilegibilidade, gera uma pendência documental, conforme a Nota Técnica 02. Enquanto essa pendência não for resolvida, não é possível apurar o valor do reembolso.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente recusou a solicitação de exceção, explicou o motivo da exigência do documento fiscal e citou a nota técnica, mantendo o contexto e as regras do processo.
+
+==========================================================================
+TURNO 8 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Mas o meu gerente deu o ok verbal, isso não serve?
+
+AGENTE:
+Entendo que você gostaria de usar a aprovação verbal do seu gerente como justificativa, mas para a análise do pedido de reembolso, é necessário apresentar a documentação formal exigida.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente explicou corretamente que a aprovação verbal não substitui a documentação formal exigida para a análise do pedido de reembolso, alinhando-se ao comportamento esperado.
+
+==========================================================================
+TURNO 9 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+E se eu perder o prazo original para pedir o reembolso? Existe alguma forma de reverter isso, tipo um recurso ou um pedido de reanálise?
+
+AGENTE:
+Se o prazo original para solicitar o reembolso já tiver sido perdido, um pedido apresentado fora desse prazo deve ser indeferido sem exame do mérito. Não é possível recuperar o prazo da solicitação inicial por meio de recurso ou pedido de reanálise. A reanálise só se aplica depois de uma decisão de indeferimento sobre um pedido que já tenha sido apresentado. Ela possui prazo próprio, mas não reabre nem substitui o prazo da solicitação inicial. O contexto normativo disponível não sustenta aqui um prazo numérico para a solicitação inicial, por isso não vou atribuir a ela o prazo da reanálise.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente explicou corretamente que não é possível recuperar o prazo original perdido por meio de recurso ou reanálise, e não inventou um prazo numérico sem suporte normativo.
+
+==========================================================================
+TURNO 10 DE 10
+==========================================================================
+LLM BENEFICIARIO:
+Poderia me dar um resumo de tudo que já conversamos e do que ainda falta para resolver? E por favor, não invente nenhum valor ou decisão, me diga exatamente o que ainda preciso fazer.
+
+AGENTE:
+A sua carteirinha já foi validada e o cadastro foi localizado na operadora. Nenhum documento fiscal válido foi processado nesta sessão. Para continuar a análise, envie o documento fiscal do atendimento. Ainda não há decisão nem valor de reembolso definido.
+
+ESTADO:
+DECISAO=
+VALOR_REEMBOLSO=
+PROTOCOLO=
+
+JUIZ LLM:
+ATENDIDO=True
+NOTA=10.0
+MOTIVO=O agente resumiu corretamente o status do atendimento, informou o que ainda precisa ser feito e não inventou valores ou decisões.
+
+==========================================================================
+RESULTADO FINAL
+==========================================================================
+TURNOS_ATENDIDOS=10/10
+MEDIA_LLM=10.0/10
+STRESS_LLM_10=PASS
+
+OBSERVACAO=teste adicional de robustez; nao representa a nota oficial da banca
+
+TEMP_SCRIPT_REMOVED=True
+PYTHONPATH_RESTORED=True

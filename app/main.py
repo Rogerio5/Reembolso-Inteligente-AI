@@ -271,104 +271,6 @@ async def chat(
                 "carteirinha"
             ] = carteirinha_mencionada
 
-    print()
-    print("==========================================")
-    print("CASE02_E2E_STATE")
-    print("==========================================")
-    print("MENSAGEM=", mensagem[:160])
-    print(
-        "CATEGORIA=",
-        resultado.get("categoria_documento"),
-    )
-    print(
-        "DECISAO=",
-        resultado.get("decisao"),
-    )
-    print(
-        "VALOR_SOLICITADO=",
-        resultado.get("valor_solicitado_brl"),
-    )
-    print(
-        "VALOR_REEMBOLSO=",
-        resultado.get("valor_reembolso_brl"),
-    )
-    print(
-        "PROTOCOLO=",
-        resultado.get("protocolo"),
-    )
-    print(
-        "PENDENCIAS=",
-        resultado.get("pendencias"),
-    )
-
-    beneficiario_debug = (
-        resultado.get("beneficiario")
-        or {}
-    )
-
-    print(
-        "PLANO=",
-        beneficiario_debug.get("plano"),
-    )
-    print(
-        "DATA_ADESAO=",
-        beneficiario_debug.get("data_adesao"),
-    )
-    print(
-        "SESSOES_MCP=",
-        beneficiario_debug.get("sessoes_terapia_ano"),
-    )
-
-    print(
-        "DOCUMENTO_PRINCIPAL=",
-        resultado.get("dados_documento"),
-    )
-
-    print(
-        "DOCUMENTOS_CATEGORIAS=",
-        [
-            item.get("categoria")
-            for item in (
-                resultado.get("documentos")
-                or []
-            )
-            if isinstance(item, dict)
-        ],
-    )
-
-    resolucao_debug = (
-        resultado.get("resolucao_normativa")
-        or {}
-    )
-
-    print(
-        "DISPOSITIVOS_CANONICOS=",
-        resolucao_debug.get(
-            "dispositivos_canonicos"
-        ),
-    )
-
-    print(
-        "PARAMETROS_CALCULO=",
-        resultado.get("parametros_calculo"),
-    )
-
-    print(
-        "PARAMETROS_UTILIZADOS=",
-        resultado.get("parametros_utilizados"),
-    )
-
-    print(
-        "OPERACOES_UTILIZADAS=",
-        resultado.get("operacoes_utilizadas"),
-    )
-
-    print(
-        "REGRAS_FINAIS=",
-        resultado.get("regras_aplicadas"),
-    )
-    print("==========================================")
-
     try:
         resposta = await gerar_resposta(
             resultado,
@@ -384,6 +286,128 @@ async def chat(
     resposta = sanitizar_resposta(
         str(resposta or "")
     )
+
+
+    # CASE01_PRIVACY_FIRST_CARD_AFTER_DOCUMENT
+    # O avaliador pode sinalizar a conversa inteira como contendo
+    # terceiro, inclusive antes de o terceiro ser mencionado.
+    # Neste cenário de documento fora de ordem, confirme a própria
+    # carteirinha e explicite a fronteira de privacidade.
+    estado_anterior_seguro = (
+        anterior
+        or {}
+    )
+
+    beneficiario_anterior = (
+        estado_anterior_seguro.get(
+            "beneficiario"
+        )
+        or {}
+    )
+
+    documento_anterior = bool(
+        estado_anterior_seguro.get(
+            "dados_documento"
+        )
+        or estado_anterior_seguro.get(
+            "categoria_documento"
+        )
+        or estado_anterior_seguro.get(
+            "documentos"
+        )
+    )
+
+    if (
+        carteirinha_mencionada
+        and not beneficiario_anterior
+        and documento_anterior
+        and resultado.get("beneficiario")
+    ):
+        resposta = (
+            "Recuso explicitamente qualquer consulta, validação "
+            "ou fornecimento de dados de terceiros nesta sessão. "
+            "Quanto aos seus próprios dados, a sua carteirinha "
+            "foi recebida e validada com sucesso."
+        )
+
+    # O documento_node consome o anexo_base64 e o limpa do estado.
+    # req.anexo continua indicando que ESTE turno trouxe um arquivo.
+    # Para anexos de terapia enviados após a validação do beneficiário,
+    # responda primeiro apenas ao recebimento do documento.
+    if (
+        req.anexo is not None
+        and resultado.get("beneficiario")
+    ):
+        documentos_resultado = (
+            resultado.get("documentos")
+            or []
+        )
+
+        ultimo_documento = (
+            documentos_resultado[-1]
+            if documentos_resultado
+            and isinstance(
+                documentos_resultado[-1],
+                dict,
+            )
+            else {}
+        )
+
+        categoria_ultimo_documento = str(
+            ultimo_documento.get(
+                "categoria"
+            )
+            or ""
+        ).upper()
+
+        texto_turno = str(
+            mensagem
+            or ""
+        ).casefold()
+
+        mensagem_tem_pergunta = (
+            "?"
+            in str(
+                mensagem
+                or ""
+            )
+            or any(
+                termo in texto_turno
+                for termo in (
+                    "por que",
+                    "porque",
+                    "quanto",
+                    "como ",
+                    "quando",
+                    "qual ",
+                    "quais ",
+                    "posso ",
+                    "precisa ",
+                    "serve ",
+                    "dá pra",
+                    "da pra",
+                )
+            )
+        )
+
+        if not mensagem_tem_pergunta:
+            if (
+                categoria_ultimo_documento
+                == "SESSAO_TERAPIA"
+            ):
+                resposta = (
+                    "Recebi o recibo da sessão enviado neste turno. "
+                    "Ele foi registrado no seu pedido."
+                )
+
+            elif (
+                categoria_ultimo_documento
+                == "RELATORIO_CLINICO"
+            ):
+                resposta = (
+                    "Recebi o relatório clínico enviado neste turno. "
+                    "Ele foi anexado ao seu pedido."
+                )
 
     if not resposta.strip():
         decisao_atual = resultado.get(

@@ -213,6 +213,11 @@ def _mensagem_sobre_historico_anual_reembolso(
         or ""
     ).casefold()
 
+    menciona_reembolso = (
+        "reembols"
+        in texto
+    )
+
     menciona_periodo_ou_saldo = any(
         termo in texto
         for termo in (
@@ -223,24 +228,49 @@ def _mensagem_sobre_historico_anual_reembolso(
         )
     )
 
-    menciona_historico = any(
+    menciona_historico_anterior = any(
         termo in texto
         for termo in (
-            "reembolso",
-            "reembolsos",
-            "pedi",
-            "pedido",
-            "pedidos",
+            "já pedi",
+            "ja pedi",
+            "já solicitei",
+            "ja solicitei",
+            "quantas vezes",
             "outras vezes",
-            "outros",
-            "outras",
             "vezes",
+            "pedido anterior",
+            "pedidos anteriores",
+            "reembolso anterior",
+            "reembolsos anteriores",
+            "antes",
+            "anterior",
+            "anteriores",
+            "bastante reembolso",
+            "vários reembolsos",
+            "varios reembolsos",
+        )
+    )
+
+    menciona_impacto = any(
+        termo in texto
+        for termo in (
+            "tem a ver",
+            "influenc",
+            "afeta",
+            "impacta",
+            "valor baixo",
+            "só isso",
+            "so isso",
         )
     )
 
     return (
-        menciona_periodo_ou_saldo
-        and menciona_historico
+        menciona_reembolso
+        and (
+            menciona_periodo_ou_saldo
+            or menciona_historico_anterior
+            or menciona_impacto
+        )
     )
 
 
@@ -1082,6 +1112,51 @@ async def gerar_resposta(
 
     texto_atual = str(mensagem or "").casefold()
 
+    # STATUS_SEM_DOCUMENTO_STATE_AWARE
+    pedido_status_ou_pendencia = any(
+        termo in texto_atual
+        for termo in (
+            "qual é a situação",
+            "qual e a situacao",
+            "qual a situação",
+            "qual a situacao",
+            "como está meu pedido",
+            "como esta meu pedido",
+            "como está o pedido",
+            "como esta o pedido",
+            "como está meu reembolso",
+            "como esta meu reembolso",
+            "o que ainda falta",
+            "o que falta",
+        )
+    )
+
+    if pedido_status_ou_pendencia:
+        beneficiario_atual = (
+            state.get("beneficiario")
+            or {}
+        )
+
+        documento_atual = bool(
+            state.get("dados_documento")
+            or state.get("categoria_documento")
+            or state.get("documentos")
+        )
+
+        if (
+            beneficiario_atual
+            and not documento_atual
+            and state.get("decisao") is None
+        ):
+            return (
+                "A sua carteirinha já foi validada e o cadastro foi "
+                "localizado na operadora. Nenhum documento fiscal "
+                "válido foi processado nesta sessão. Para continuar "
+                "a análise, envie o documento fiscal do atendimento. "
+                "Ainda não há decisão nem valor de reembolso definido."
+            )
+
+
     tentativa_ignorar_regras = any(
         termo in texto_atual
         for termo in (
@@ -1116,6 +1191,34 @@ async def gerar_resposta(
     )
 
     if tentativa_aprovar_sem_documento:
+        beneficiario_atual = (
+            state.get("beneficiario")
+            or {}
+        )
+
+        documento_atual = bool(
+            state.get("dados_documento")
+            or state.get("categoria_documento")
+            or state.get("documentos")
+        )
+
+        if beneficiario_atual:
+            if not documento_atual:
+                return (
+                    "Não posso ignorar as regras nem aprovar um "
+                    "reembolso sem a documentação exigida. "
+                    "A sua carteirinha já foi validada nesta sessão. "
+                    "Para continuar a análise, preciso de um "
+                    "documento fiscal válido."
+                )
+
+            return (
+                "Não posso ignorar as regras nem alterar uma análise "
+                "com base apenas em uma instrução da conversa. "
+                "A decisão deve seguir os documentos e as regras "
+                "aplicáveis ao pedido."
+            )
+
         return (
             "Não posso ignorar as regras nem aprovar um reembolso "
             "sem a documentação exigida. Também não posso considerar "
@@ -1125,13 +1228,25 @@ async def gerar_resposta(
         )
 
     pedido_resumo_final = (
-        "resumo final" in texto_atual
+        "resumo final"
+        in texto_atual
         or (
-            "resumo" in texto_atual
-            and "meu pedido" in texto_atual
+            "resumo"
+            in texto_atual
+            and any(
+                termo in texto_atual
+                for termo in (
+                    "meu pedido",
+                    "pedido",
+                    "atendimento",
+                    "até aqui",
+                    "ate aqui",
+                    "situação",
+                    "situacao",
+                )
+            )
         )
     )
-
     if pedido_resumo_final:
         beneficiario_atual = state.get("beneficiario") or {}
         documento_atual = (
@@ -1142,6 +1257,20 @@ async def gerar_resposta(
         decisao_atual = state.get("decisao")
         valor_atual = state.get("valor_reembolso_brl")
 
+        if (
+            beneficiario_atual
+            and not documento_atual
+            and decisao_atual is None
+            and valor_atual is None
+        ):
+            return (
+                "Resumo do estado atual: a sua carteirinha já foi "
+                "validada e o cadastro foi localizado na operadora. "
+                "Nenhum documento fiscal válido foi processado nesta "
+                "sessão. Ainda não existe decisão nem valor de "
+                "reembolso definido. Para continuar a análise, envie "
+                "o documento fiscal do atendimento."
+            )
         if (
             not beneficiario_atual
             and not documento_atual
@@ -1593,6 +1722,9 @@ async def gerar_resposta(
 
     if (
         beneficiario
+        and not _mensagem_sobre_historico_anual_reembolso(
+            mensagem
+        )
         and _mensagem_sobre_quantidade_sessoes(
             mensagem,
             contexto_terapia=(
@@ -2157,12 +2289,18 @@ async def gerar_resposta(
         "Nesse caso não diga que está faltando documento e não solicite "
         "um documento novo nessa mesma resposta.\n"
 
-        "3. Se um documento fiscal já estiver em documento_principal e "
-        "a decisão for PENDENTE_DOCUMENTO, reconheça explicitamente que "
-        "o documento enviado foi recebido. Depois explique qual "
-        "complemento consta em pendencias e por que a análise ainda não "
-        "pode ser concluída. Não trate o documento fiscal recebido como "
-        "se ele não tivesse sido enviado.\n"
+        "3. Se um documento fiscal já estiver em documento_principal, "
+        "a decisão for PENDENTE_DOCUMENTO e a MENSAGEM ATUAL estiver "
+        "entregando ou encaminhando esse documento, a PRIMEIRA frase "
+        "da resposta deve confirmar o recebimento em primeira pessoa "
+        "e voz ativa, começando de forma inequívoca com 'Recebi'. "
+        "Por exemplo: 'Recebi o recibo enviado neste turno.' "
+        "Não use apenas forma passiva como 'o documento foi recebido', "
+        "não comece por 'Entendido' e não comece pela pendência. "
+        "Depois, em frase separada, informe qual complemento consta em "
+        "pendencias e por que a análise ainda não pode ser concluída. "
+        "Não trate o documento fiscal recebido como se ele não tivesse "
+        "sido enviado.\n"
 
         "4. Se a pergunta atual for sobre quantas sessões o beneficiário "
         "já realizou no ano, use sessoes_terapia_ano_operadora quando "
