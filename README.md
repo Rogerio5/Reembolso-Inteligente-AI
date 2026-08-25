@@ -6,7 +6,7 @@ O projeto foi desenvolvido com foco em **Engenharia de IA**, confiabilidade, pri
 
 ---
 
-![Capa do Projeto - Reembolso-inteligente-AI](capa-reembolso-inteligente-ai.png)
+![Capa do Projeto - Reembolso Inteligente AI](docs/imagens/capa-reembolso-inteligente-ai.png)
 
 ---
 
