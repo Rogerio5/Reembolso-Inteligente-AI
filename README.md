@@ -6,6 +6,10 @@ O projeto foi desenvolvido com foco em **Engenharia de IA**, confiabilidade, pri
 
 ---
 
+![Capa do Projeto - Reembolso-inteligente-AI](capa-reembolso-inteligente-ai.png)
+
+---
+
 ## 📌 Visão Geral
 
 O **Reembolso Inteligente** atua como um agente conversacional capaz de acompanhar um pedido de reembolso desde o primeiro contato até sua análise final.
