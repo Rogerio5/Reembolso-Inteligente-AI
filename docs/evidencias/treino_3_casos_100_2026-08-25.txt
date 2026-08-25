@@ -1,0 +1,41 @@
+EVIDÊNCIA DE TESTE — AGENTE DE REEMBOLSO
+Treino oficial — 3 casos avaliados com juiz LLM
+Data: 2026-08-25
+
+Execução:
+python .\rodar_treino.py -v
+
+RESULTADOS
+
+Caso 01
+Nota: 100.0
+Turnos: 8/8
+Desfecho: ok
+
+Caso 02
+Nota: 100.0
+Turnos: 9/9
+Desfecho: ok
+
+Caso 03
+Nota: 100.0
+Turnos: 7/7
+Desfecho: ok
+
+RESULTADO FINAL
+
+CASOS_APROVADOS=3/3
+CASO_01=100.0
+CASO_02=100.0
+CASO_03=100.0
+MEDIA_FINAL=100.0
+TREINO_3_CASOS=PASS
+
+Observação:
+Esta evidência registra a execução dos três casos de treino do projeto.
+Os turnos e desfechos foram avaliados pelo mecanismo de avaliação com LLM.
+
+Evidência adicional disponível:
+- evidencia_stress_llm_10_2026-08-25.txt
+- 10/10 turnos atendidos
+- média LLM 10.0/10
