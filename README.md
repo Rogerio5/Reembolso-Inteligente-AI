@@ -1,4 +1,4 @@
-# 🤖 Reembolso Inteligente — Agente de IA para Análise de Reembolsos
+# 🤖 Reembolso Inteligente — Agente de IA Confiável e Auditável
 
 Sistema inteligente desenvolvido em **Python** para condução e análise de solicitações de reembolso em planos de saúde, combinando **IA Generativa, LangGraph, MCP, RAG, memória conversacional, processamento de documentos, regras determinísticas, guardrails, FastAPI e Docker**.
 
